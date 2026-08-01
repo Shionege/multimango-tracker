@@ -1329,7 +1329,10 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
 /* Comprehensive Mobile Responsiveness Fixes */
 @media (max-width: 600px) {
     body {
-        padding: 0.75rem 0.5rem;
+        padding-top: max(1.25rem, calc(0.75rem + env(safe-area-inset-top)));
+        padding-bottom: max(0.75rem, calc(0.75rem + env(safe-area-inset-bottom)));
+        padding-left: max(0.5rem, calc(0.5rem + env(safe-area-inset-left)));
+        padding-right: max(0.5rem, calc(0.5rem + env(safe-area-inset-right)));
     }
     
     .container {

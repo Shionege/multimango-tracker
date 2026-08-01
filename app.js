@@ -812,9 +812,9 @@ function initEventListeners() {
         btnSyncPhone.addEventListener('click', () => {
             qrcodeContainer.innerHTML = '';
             
-            // Reliable 24/7 Web App Client
-            const baseWebUrl = 'https://htmlpreview.github.io/?https://raw.githubusercontent.com/antigravity-apps/timetracker/main/index.html'; 
-            const syncUrl = `${baseWebUrl}&db=multimango-tracker-default-rtdb&auth=${FIREBASE_AUTH_KEY}`;
+            // Official Shionege GitHub Pages 24/7 Hosting Client
+            const baseWebUrl = 'https://shionege.github.io/multimango-tracker/'; 
+            const syncUrl = `${baseWebUrl}?db=multimango-tracker-default-rtdb&auth=${FIREBASE_AUTH_KEY}`;
             
             if (qrLinkText) qrLinkText.textContent = syncUrl;
 

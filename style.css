@@ -919,7 +919,7 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
     display: none;
     position: absolute;
     right: 0;
-    top: calc(100% + 4px);
+    top: 100%;
     background: #111827;
     border: 1px solid var(--card-border);
     min-width: 140px;

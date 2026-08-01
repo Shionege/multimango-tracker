@@ -30,9 +30,15 @@
     box-sizing: border-box;
 }
 
+html {
+    background-color: #090d16;
+    overscroll-behavior-y: none;
+}
+
 body {
     font-family: 'Outfit', sans-serif;
     background: var(--bg-gradient);
+    background-color: #090d16;
     color: var(--text-main);
     min-height: 100vh;
     overflow-x: hidden;
@@ -1342,6 +1348,28 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
     .dashboard-grid {
         grid-template-columns: 1fr;
         gap: 0.75rem;
+    }
+
+    .shift-controls {
+        grid-template-columns: 1fr !important;
+        gap: 0.75rem;
+        width: 100%;
+    }
+
+    .shift-date-group, .shift-status-container, .input-group {
+        grid-column: span 1 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box;
+    }
+
+    .shift-spacer {
+        display: none !important;
+    }
+
+    input[type="date"], input[type="time"], .time-stepper {
+        max-width: 100% !important;
+        box-sizing: border-box;
     }
 
     .time-stepper {

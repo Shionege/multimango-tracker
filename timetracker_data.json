@@ -1,0 +1,276 @@
+{
+  "logs": [
+    {
+      "id": "1785550857982",
+      "date": "2026-08-01",
+      "startTime": "04:00",
+      "endTime": "09:00",
+      "duration": 5,
+      "tasks": 2,
+      "rate": 0.4
+    },
+    {
+      "id": "1785375145674",
+      "date": "2026-07-21",
+      "startTime": "21:00",
+      "endTime": "22:00",
+      "duration": 1,
+      "tasks": 1,
+      "rate": 1
+    },
+    {
+      "id": "1785375058563",
+      "date": "2026-07-21",
+      "startTime": "15:00",
+      "endTime": "16:30",
+      "duration": 1.5,
+      "tasks": 1,
+      "rate": 0.67
+    },
+    {
+      "id": "1785342663938",
+      "date": "2026-07-29",
+      "startTime": "20:00",
+      "endTime": "23:30",
+      "duration": 3.5,
+      "tasks": 2,
+      "rate": 0.57
+    },
+    {
+      "id": "1785313614895",
+      "date": "2026-07-29",
+      "startTime": "09:00",
+      "endTime": "15:30",
+      "duration": 6.5,
+      "tasks": 3,
+      "rate": 0.46
+    },
+    {
+      "id": "1785259605576",
+      "date": "2026-07-28",
+      "startTime": "04:00",
+      "endTime": "06:00",
+      "duration": 2,
+      "tasks": 1,
+      "rate": 0.5
+    },
+    {
+      "id": "1785259528966",
+      "date": "2026-07-25",
+      "startTime": "04:00",
+      "endTime": "10:00",
+      "duration": 6,
+      "tasks": 4,
+      "rate": 0.67
+    },
+    {
+      "id": "1785259492105",
+      "date": "2026-07-24",
+      "startTime": "06:30",
+      "endTime": "11:00",
+      "duration": 4.5,
+      "tasks": 4,
+      "rate": 0.89
+    },
+    {
+      "id": "1785259467904",
+      "date": "2026-07-23",
+      "startTime": "19:00",
+      "endTime": "22:00",
+      "duration": 3,
+      "tasks": 3,
+      "rate": 1
+    },
+    {
+      "id": "1785259443194",
+      "date": "2026-07-23",
+      "startTime": "16:00",
+      "endTime": "17:30",
+      "duration": 1.5,
+      "tasks": 1,
+      "rate": 0.67
+    },
+    {
+      "id": "1785259369776",
+      "date": "2026-07-22",
+      "startTime": "19:50",
+      "endTime": "21:50",
+      "duration": 2,
+      "tasks": 1,
+      "rate": 0.5
+    },
+    {
+      "id": "1785259325596",
+      "date": "2026-07-21",
+      "startTime": "04:00",
+      "endTime": "05:00",
+      "duration": 1,
+      "tasks": 1,
+      "rate": 1
+    },
+    {
+      "id": "1785259259644",
+      "date": "2026-07-20",
+      "startTime": "20:00",
+      "endTime": "22:30",
+      "duration": 2.5,
+      "tasks": 3,
+      "rate": 1.2
+    },
+    {
+      "id": "1785259201507",
+      "date": "2026-07-18",
+      "startTime": "13:00",
+      "endTime": "14:15",
+      "duration": 1.25,
+      "tasks": 2,
+      "rate": 1.6
+    },
+    {
+      "id": "1785259172154",
+      "date": "2026-07-17",
+      "startTime": "18:30",
+      "endTime": "21:00",
+      "duration": 2.5,
+      "tasks": 4,
+      "rate": 1.6
+    },
+    {
+      "id": "1785259146684",
+      "date": "2026-07-17",
+      "startTime": "14:00",
+      "endTime": "16:00",
+      "duration": 2,
+      "tasks": 3,
+      "rate": 1.5
+    },
+    {
+      "id": "1785259088645",
+      "date": "2026-07-16",
+      "startTime": "20:00",
+      "endTime": "21:40",
+      "duration": 1.6666666666666667,
+      "tasks": 3,
+      "rate": 1.8
+    },
+    {
+      "id": "1785259069925",
+      "date": "2026-07-16",
+      "startTime": "16:00",
+      "endTime": "18:00",
+      "duration": 2,
+      "tasks": 4,
+      "rate": 2
+    },
+    {
+      "id": "1785259026424",
+      "date": "2026-07-15",
+      "startTime": "22:00",
+      "endTime": "22:40",
+      "duration": 0.6666666666666666,
+      "tasks": 1,
+      "rate": 1.5
+    },
+    {
+      "id": "1785259003484",
+      "date": "2026-07-15",
+      "startTime": "15:00",
+      "endTime": "16:00",
+      "duration": 1,
+      "tasks": 2,
+      "rate": 2
+    },
+    {
+      "id": "1785258982565",
+      "date": "2026-07-15",
+      "startTime": "12:00",
+      "endTime": "13:00",
+      "duration": 1,
+      "tasks": 2,
+      "rate": 2
+    },
+    {
+      "id": "1785258960935",
+      "date": "2026-07-15",
+      "startTime": "00:00",
+      "endTime": "01:00",
+      "duration": 1,
+      "tasks": 2,
+      "rate": 2
+    },
+    {
+      "id": "1785258945885",
+      "date": "2026-07-14",
+      "startTime": "23:00",
+      "endTime": "00:00",
+      "duration": 1,
+      "tasks": 3,
+      "rate": 3
+    },
+    {
+      "id": "1785258914315",
+      "date": "2026-07-14",
+      "startTime": "14:00",
+      "endTime": "15:00",
+      "duration": 1,
+      "tasks": 1,
+      "rate": 1
+    },
+    {
+      "id": "1785258873845",
+      "date": "2026-07-14",
+      "startTime": "12:20",
+      "endTime": "13:20",
+      "duration": 1,
+      "tasks": 2,
+      "rate": 2
+    },
+    {
+      "id": "1785258837063",
+      "date": "2026-07-14",
+      "startTime": "01:00",
+      "endTime": "02:00",
+      "duration": 1,
+      "tasks": 3,
+      "rate": 3
+    },
+    {
+      "id": "1785258802353",
+      "date": "2026-07-13",
+      "startTime": "14:50",
+      "endTime": "16:10",
+      "duration": 1.3333333333333333,
+      "tasks": 3,
+      "rate": 2.25
+    },
+    {
+      "id": "1785258228232",
+      "date": "2026-07-12",
+      "startTime": "22:40",
+      "endTime": "23:40",
+      "duration": 1,
+      "tasks": 4,
+      "rate": 4
+    },
+    {
+      "id": "1785257724521",
+      "date": "2026-07-28",
+      "startTime": "20:00",
+      "endTime": "00:00",
+      "duration": 4,
+      "tasks": 2,
+      "rate": 0.5
+    },
+    {
+      "id": "1785239999752",
+      "date": "2026-07-28",
+      "startTime": "11:00",
+      "endTime": "12:30",
+      "duration": 1.5,
+      "tasks": 1,
+      "rate": 0.67
+    }
+  ],
+  "activeShift": null,
+  "lastSaved": "2026-08-01T02:20:58.004Z"
+}

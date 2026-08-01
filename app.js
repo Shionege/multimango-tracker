@@ -1,0 +1,1452 @@
+// State Management
+let logs = [];
+let activeShift = null;
+let liveTimerInterval = null;
+let lastAddedTickerInterval = null;
+
+// DOM Elements & Virtual Proxies
+const clockElement = document.getElementById('current-date-time');
+const shiftDateInput = document.getElementById('shift-date');
+const btnStartShift = document.getElementById('btn-start-shift');
+const btnEndShift = document.getElementById('btn-end-shift');
+const shiftStatusText = document.getElementById('shift-status-text');
+const shiftDurationTimer = document.getElementById('shift-duration-timer');
+
+const counterDisplay = document.getElementById('counter-display');
+const btnPlusTask = document.getElementById('btn-plus-task');
+const btnMinusTask = document.getElementById('btn-minus-task');
+const counterAuditLog = document.getElementById('counter-audit-log');
+
+// --- TIME STEPPER HELPERS ---
+
+function getStepperTime(prefix) {
+    const h = document.getElementById(`${prefix}-hour`);
+    const m = document.getElementById(`${prefix}-min`);
+    if (!h || !m) return '00:00';
+    const hv = String(Math.min(23, Math.max(0, parseInt(h.value) || 0))).padStart(2, '0');
+    const mv = String(Math.min(59, Math.max(0, parseInt(m.value) || 0))).padStart(2, '0');
+    return `${hv}:${mv}`;
+}
+
+function setStepperTime(prefix, timeStr) {
+    if (!timeStr || timeStr === '--:--') timeStr = '00:00';
+    const [h, m] = timeStr.split(':').map(Number);
+    const hEl = document.getElementById(`${prefix}-hour`);
+    const mEl = document.getElementById(`${prefix}-min`);
+    if (hEl) hEl.value = h;
+    if (mEl) mEl.value = m;
+}
+
+function setStepperDisabled(prefix, disabled) {
+    const stepper = document.getElementById(`${prefix}-stepper`);
+    if (!stepper) return;
+    stepper.querySelectorAll('input, button').forEach(el => {
+        el.disabled = disabled;
+    });
+    stepper.style.opacity = disabled ? '0.45' : '1';
+    stepper.style.pointerEvents = disabled ? 'none' : '';
+}
+
+function initSteppers() {
+    const prefixes = ['shift-start', 'shift-end', 'edit-start', 'edit-end'];
+    prefixes.forEach(prefix => {
+        const hourInput = document.getElementById(`${prefix}-hour`);
+        const minInput  = document.getElementById(`${prefix}-min`);
+        if (!hourInput || !minInput) return;
+
+        // Clamp on manual input
+        hourInput.addEventListener('change', () => {
+            let v = parseInt(hourInput.value);
+            if (isNaN(v)) v = 0;
+            hourInput.value = Math.min(23, Math.max(0, v));
+            if (prefix === 'shift-end' && activeShift) {
+                activeShift.plannedEndTime = getStepperTime(prefix);
+                saveData();
+            }
+            if (prefix.startsWith('shift')) checkDailyLimitWarning();
+        });
+        minInput.addEventListener('change', () => {
+            let v = parseInt(minInput.value);
+            if (isNaN(v)) v = 0;
+            minInput.value = Math.min(59, Math.max(0, v));
+            if (prefix === 'shift-end' && activeShift) {
+                activeShift.plannedEndTime = getStepperTime(prefix);
+                saveData();
+            }
+            if (prefix.startsWith('shift')) checkDailyLimitWarning();
+        });
+
+        // ▲ / ▼ buttons
+        const wire = (btnId, input, max, dir) => {
+            const btn = document.getElementById(btnId);
+            if (!btn) return;
+            btn.addEventListener('click', () => {
+                let v = parseInt(input.value) || 0;
+                v = ((v + dir) + max + 1) % (max + 1); // wrap-around
+                input.value = v;
+                if (prefix === 'shift-end' && activeShift) {
+                    activeShift.plannedEndTime = getStepperTime(prefix);
+                    saveData();
+                }
+                if (prefix.startsWith('shift')) checkDailyLimitWarning();
+            });
+        };
+        wire(`${prefix}-hour-up`,   hourInput, 23, +1);
+        wire(`${prefix}-hour-down`, hourInput, 23, -1);
+        wire(`${prefix}-min-up`,    minInput,  59, +1);
+        wire(`${prefix}-min-down`,  minInput,  59, -1);
+    });
+}
+
+function checkDailyLimitWarning() {
+    const warningEl = document.getElementById('end-time-limit-warning');
+    if (!warningEl) return;
+
+    const dateVal = shiftDateInput.value;
+    if (!dateVal) {
+        warningEl.style.display = 'none';
+        return;
+    }
+
+    let completedHours = 0;
+    logs.forEach(log => {
+        if (log.date === dateVal) {
+            completedHours += log.duration;
+        }
+    });
+
+    const startVal = getStepperTime('shift-start');
+    const endVal = getStepperTime('shift-end');
+    const currentPlanDuration = getDurationHours(startVal, endVal);
+
+    const totalHours = completedHours + currentPlanDuration;
+
+    if (totalHours > 10) {
+        const excess = totalHours - 10;
+        const excessHrs = Math.floor(excess);
+        const excessMins = Math.round((excess - excessHrs) * 60);
+        
+        let timeStr = '';
+        if (excessHrs > 0) timeStr += `${excessHrs}h `;
+        if (excessMins > 0) timeStr += `${excessMins}m`;
+        
+        warningEl.textContent = `⚠️ Plan exceeds 10h daily limit by ${timeStr.trim()}`;
+        warningEl.style.display = 'block';
+    } else {
+        warningEl.style.display = 'none';
+    }
+}
+
+// Virtual inputs — thin wrappers over the stepper inputs
+const shiftStartInput = {
+    get value() { return getStepperTime('shift-start'); },
+    set value(val) { setStepperTime('shift-start', val); },
+    set disabled(val) { setStepperDisabled('shift-start', val); }
+};
+
+const shiftEndInput = {
+    get value() { return getStepperTime('shift-end'); },
+    set value(val) {
+        setStepperTime('shift-end', val);
+        if (activeShift && val) { activeShift.plannedEndTime = val; saveData(); }
+    },
+    set disabled(val) { setStepperDisabled('shift-end', val); }
+};
+
+const editStartInput = {
+    get value() { return getStepperTime('edit-start'); },
+    set value(val) { setStepperTime('edit-start', val); }
+};
+
+const editEndInput = {
+    get value() { return getStepperTime('edit-end'); },
+    set value(val) { setStepperTime('edit-end', val); }
+};
+
+
+const statTotalTasks = document.getElementById('stat-total-tasks');
+const statTotalHours = document.getElementById('stat-total-hours');
+const statAvgRate = document.getElementById('stat-avg-rate');
+
+const filterStartDate = document.getElementById('filter-start-date');
+const filterEndDate = document.getElementById('filter-end-date');
+const btnResetFilters = document.getElementById('btn-reset-filters');
+
+const btnExportCsv = document.getElementById('btn-export-csv');
+const btnExportJson = document.getElementById('btn-export-json');
+const btnImportJson = document.getElementById('btn-import-json');
+const fileImportInput = document.getElementById('file-import-input');
+
+const logsTbody = document.getElementById('logs-tbody');
+const emptyState = document.getElementById('empty-state');
+
+// Edit Modal Elements
+const editModal = document.getElementById('edit-modal');
+const editIndexInput = document.getElementById('edit-index');
+const editDateInput = document.getElementById('edit-date');
+const editTasksInput = document.getElementById('edit-tasks');
+const btnCloseModal = document.getElementById('btn-close-modal');
+const btnCancelEdit = document.getElementById('btn-cancel-edit');
+const btnSaveEdit = document.getElementById('btn-save-edit');
+
+const toastContainer = document.getElementById('toast-container');
+
+// --- INITIALIZATION ---
+document.addEventListener('DOMContentLoaded', () => {
+    // 1. Wire up stepper buttons
+    initSteppers();
+
+    // 2. Start system clock
+    updateSystemClock();
+    setInterval(updateSystemClock, 1000);
+
+    // 3. Load data from localStorage
+    loadData();
+
+    // 4. Set default dates and initial start time
+    const todayStr = getTodayDateString();
+    shiftDateInput.value = todayStr;
+    filterStartDate.value = todayStr;
+    filterEndDate.value = todayStr;
+    setStepperTime('shift-start', getCurrentTimeString());
+
+    // 5. Initialize event listeners
+    initEventListeners();
+
+    // 6. Fetch live exchange rate (USD to IDR)
+    fetchExchangeRate();
+
+    // 7. Restore active shift if exists
+    if (activeShift) {
+        resumeActiveShift();
+    } else {
+        updateUIForInactiveShift();
+    }
+
+    // 8. Initial render of history and statistics
+    renderLogs();
+});
+
+// --- EXCHANGE RATE STATE & HELPERS ---
+let usdToIdrRate = 16000; // Fallback rate
+
+async function fetchExchangeRate() {
+    try {
+        const res = await fetch('https://open.er-api.com/v6/latest/USD');
+        const data = await res.json();
+        if (data && data.rates && data.rates.IDR) {
+            usdToIdrRate = data.rates.IDR;
+            const formatted = new Intl.NumberFormat('id-ID').format(Math.round(usdToIdrRate));
+            const el = document.getElementById('rate-exchange-info');
+            if (el) el.textContent = `Rate: $1 = Rp ${formatted}`;
+            
+            // Re-render logs and stats with the updated live rate
+            renderLogs();
+        }
+    } catch (e) {
+        console.warn('Failed to fetch live USD/IDR rate, using fallback', e);
+        const el = document.getElementById('rate-exchange-info');
+        if (el) el.textContent = `Rate: $1 = Rp 16.000 (fallback)`;
+    }
+}
+
+function formatPaymentIDR(usdValue) {
+    const idrValue = usdValue * usdToIdrRate;
+    // Format to currency IDR style (e.g. Rp 240.000) without decimals
+    return 'Rp ' + new Intl.NumberFormat('id-ID').format(Math.round(idrValue));
+}
+
+// --- HELPER FUNCTIONS ---
+
+// Update header date and time
+function updateSystemClock() {
+    const now = new Date();
+    const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+    const datePart = now.toLocaleDateString('id-ID', options);
+    const timePart = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    clockElement.textContent = `${datePart} - ${timePart}`;
+}
+
+// Get date in YYYY-MM-DD
+function getTodayDateString() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+// Get time in HH:MM
+function getCurrentTimeString() {
+    const now = new Date();
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
+}
+
+// Show custom toast notification
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    
+    let icon = '';
+    if (type === 'success') {
+        icon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+    } else if (type === 'danger') {
+        icon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>`;
+    } else {
+        icon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="9" x2="12.01" y2="9"></line></svg>`;
+    }
+
+    toast.innerHTML = `${icon} <span>${message}</span>`;
+    toastContainer.appendChild(toast);
+    
+    // Auto-remove toast
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateX(120%)';
+        toast.style.transition = 'all 0.3s ease';
+        setTimeout(() => toast.remove(), 300);
+    }, 3500);
+}
+
+// --- FILE SYSTEM ACCESS & INDEXEDDB SYNC ---
+let dirHandle = null;
+
+function getIDB() {
+    return new Promise((resolve, reject) => {
+        const req = indexedDB.open('MultimangoStore', 1);
+        req.onupgradeneeded = () => req.result.createObjectStore('handles');
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+    });
+}
+
+async function getStoredDirHandle() {
+    try {
+        const db = await getIDB();
+        return new Promise((resolve) => {
+            const tx = db.transaction('handles', 'readonly');
+            const store = tx.objectStore('handles');
+            const req = store.get('syncDir');
+            req.onsuccess = () => resolve(req.result || null);
+            req.onerror = () => resolve(null);
+        });
+    } catch (e) {
+        return null;
+    }
+}
+
+async function storeDirHandle(handle) {
+    try {
+        const db = await getIDB();
+        const tx = db.transaction('handles', 'readwrite');
+        tx.objectStore('handles').put(handle, 'syncDir');
+    } catch (e) {
+        console.error('Failed to save handle to IDB', e);
+    }
+}
+
+async function updateSyncFolderUI() {
+    const label = document.getElementById('sync-folder-label');
+    const btn = document.getElementById('btn-sync-folder');
+    if (!label || !btn) return;
+
+    if (dirHandle) {
+        label.textContent = `Synced: ${dirHandle.name}`;
+        btn.classList.add('synced');
+        btn.title = `Data auto-syncing to ${dirHandle.name}/timetracker_data.json`;
+    } else {
+        label.textContent = 'Link Folder';
+        btn.classList.remove('synced');
+        btn.title = 'Click to link local folder for cross-browser auto-sync';
+    }
+}
+
+async function selectSyncFolder() {
+    if (!('showDirectoryPicker' in window)) {
+        showToast('File System Access API is not supported in this browser.', 'danger');
+        return;
+    }
+    try {
+        dirHandle = await window.showDirectoryPicker();
+        await storeDirHandle(dirHandle);
+        await updateSyncFolderUI();
+        showToast(`Linked folder: ${dirHandle.name}. Syncing data...`, 'success');
+        
+        // Try reading existing file if available, or write current data
+        const readSuccess = await loadFromFileSystem();
+        if (!readSuccess) {
+            await saveToFileSystem();
+        } else {
+            renderLogs();
+            if (activeShift) resumeActiveShift();
+            else updateUIForInactiveShift();
+        }
+    } catch (e) {
+        if (e.name !== 'AbortError') {
+            console.error(e);
+            showToast('Failed to select directory', 'danger');
+        }
+    }
+}
+
+async function verifyPermission(fileHandle, readWrite) {
+    const options = {};
+    if (readWrite) {
+        options.mode = 'readwrite';
+    }
+    if ((await fileHandle.queryPermission(options)) === 'granted') {
+        return true;
+    }
+    if ((await fileHandle.requestPermission(options)) === 'granted') {
+        return true;
+    }
+    return false;
+}
+
+async function saveToFileSystem() {
+    if (!dirHandle) return;
+    try {
+        const hasPerm = await verifyPermission(dirHandle, true);
+        if (!hasPerm) return;
+
+        const fileHandle = await dirHandle.getFileHandle('timetracker_data.json', { create: true });
+        const writable = await fileHandle.createWritable();
+        const data = {
+            logs: logs,
+            activeShift: activeShift,
+            lastSaved: new Date().toISOString()
+        };
+        await writable.write(JSON.stringify(data, null, 2));
+        await writable.close();
+    } catch (e) {
+        console.error('File System Auto-save error:', e);
+    }
+}
+
+async function loadFromFileSystem() {
+    if (!dirHandle) return false;
+    try {
+        const hasPerm = await verifyPermission(dirHandle, false);
+        if (!hasPerm) return false;
+
+        const fileHandle = await dirHandle.getFileHandle('timetracker_data.json');
+        const file = await fileHandle.getFile();
+        const text = await file.text();
+        if (!text) return false;
+        
+        const data = JSON.parse(text);
+        if (data && Array.isArray(data.logs)) {
+            logs = data.logs;
+            activeShift = data.activeShift || null;
+            // Also sync to LocalStorage fallback
+            localStorage.setItem('multimango_logs', JSON.stringify(logs));
+            if (activeShift) localStorage.setItem('multimango_active_shift', JSON.stringify(activeShift));
+            else localStorage.removeItem('multimango_active_shift');
+            return true;
+        }
+    } catch (e) {
+        // File might not exist yet, which is normal on initial setup
+    }
+    return false;
+}
+
+// Firebase Config
+let FIREBASE_DB_URL = 'https://multimango-tracker-default-rtdb.asia-southeast1.firebasedatabase.app/';
+let FIREBASE_AUTH_KEY = 'MultimangoRahasia123';
+
+// Dynamic Database Overriding (for Phone Sync Access via QR)
+const urlParams = new URLSearchParams(window.location.search);
+const queryDb = urlParams.get('db');
+const queryAuth = urlParams.get('auth');
+
+if (queryDb && queryAuth) {
+    localStorage.setItem('override_db_url', `https://${queryDb}.asia-southeast1.firebasedatabase.app/`);
+    localStorage.setItem('override_auth_key', queryAuth);
+    // Clean up URL query parameters to avoid bookmarking auth credentials
+    window.history.replaceState({}, document.title, window.location.pathname);
+}
+
+const savedOverriddenUrl = localStorage.getItem('override_db_url');
+const savedOverriddenAuth = localStorage.getItem('override_auth_key');
+if (savedOverriddenUrl && savedOverriddenAuth) {
+    FIREBASE_DB_URL = savedOverriddenUrl;
+    FIREBASE_AUTH_KEY = savedOverriddenAuth;
+}
+
+// Save to LocalStorage & File System & Cloud Sync
+function saveData() {
+    localStorage.setItem('multimango_logs', JSON.stringify(logs));
+    if (activeShift) {
+        localStorage.setItem('multimango_active_shift', JSON.stringify(activeShift));
+    } else {
+        localStorage.removeItem('multimango_active_shift');
+    }
+
+    // Auto-save to local linked folder file
+    saveToFileSystem();
+
+    // Auto-sync to Firebase Cloud
+    saveToCloud();
+}
+
+async function saveToCloud() {
+    const statusEl = document.getElementById('cloud-sync-status');
+    if (statusEl) {
+        statusEl.innerHTML = '● Cloud: Syncing...';
+        statusEl.style.color = 'var(--mango-primary)';
+    }
+
+    const url = `${FIREBASE_DB_URL}.json?auth=${FIREBASE_AUTH_KEY}`;
+    const payload = {
+        logs: logs,
+        activeShift: activeShift,
+        lastSaved: new Date().toISOString()
+    };
+
+    try {
+        const res = await fetch(url, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+            if (statusEl) {
+                statusEl.innerHTML = '● Cloud: Synced';
+                statusEl.style.color = 'var(--success)';
+            }
+        } else {
+            throw new Error('Cloud HTTP error');
+        }
+    } catch (e) {
+        console.warn('Cloud auto-sync failed:', e);
+        if (statusEl) {
+            statusEl.innerHTML = '● Cloud: Offline';
+            statusEl.style.color = 'var(--text-muted)';
+        }
+    }
+}
+
+async function fetchFromCloud() {
+    const statusEl = document.getElementById('cloud-sync-status');
+    if (statusEl) {
+        statusEl.innerHTML = '● Cloud: Syncing...';
+        statusEl.style.color = 'var(--mango-primary)';
+    }
+
+    const url = `${FIREBASE_DB_URL}.json?auth=${FIREBASE_AUTH_KEY}`;
+    try {
+        const res = await fetch(url);
+        if (res.ok) {
+            const data = await res.json();
+            if (data) {
+                let hasChanges = false;
+                if (data.logs && Array.isArray(data.logs)) {
+                    logs = data.logs;
+                    localStorage.setItem('multimango_logs', JSON.stringify(logs));
+                    hasChanges = true;
+                }
+                if (data.hasOwnProperty('activeShift')) {
+                    activeShift = data.activeShift;
+                    if (activeShift) {
+                        localStorage.setItem('multimango_active_shift', JSON.stringify(activeShift));
+                    } else {
+                        localStorage.removeItem('multimango_active_shift');
+                    }
+                    hasChanges = true;
+                }
+                
+                if (hasChanges) {
+                    renderLogs();
+                    if (activeShift) resumeActiveShift();
+                    else updateUIForInactiveShift();
+                }
+
+                if (statusEl) {
+                    statusEl.innerHTML = '● Cloud: Synced';
+                    statusEl.style.color = 'var(--success)';
+                }
+                return true;
+            }
+        }
+    } catch (e) {
+        console.warn('Could not sync-down from cloud on load:', e);
+    }
+    
+    if (statusEl) {
+        statusEl.innerHTML = '● Cloud: Offline';
+        statusEl.style.color = 'var(--text-muted)';
+    }
+    return false;
+}
+
+// Load from LocalStorage (and attempt file system auto-sync)
+async function loadData() {
+    // Primary fallback: LocalStorage
+    const savedLogs = localStorage.getItem('multimango_logs');
+    if (savedLogs) {
+        try {
+            logs = JSON.parse(savedLogs);
+        } catch (e) {
+            logs = [];
+        }
+    }
+    
+    const savedActive = localStorage.getItem('multimango_active_shift');
+    if (savedActive) {
+        try {
+            activeShift = JSON.parse(savedActive);
+        } catch (e) {
+            activeShift = null;
+        }
+    }
+
+    // Try pulling from cloud database
+    await fetchFromCloud();
+
+    // Attempt restoring file handle & load from synced local file
+    try {
+        const handle = await getStoredDirHandle();
+        if (handle) {
+            dirHandle = handle;
+            updateSyncFolderUI();
+            const loadedFromFile = await loadFromFileSystem();
+            if (loadedFromFile) {
+                renderLogs();
+                if (activeShift) resumeActiveShift();
+                else updateUIForInactiveShift();
+            }
+        }
+    } catch (e) {
+        console.warn('IDB handle restore error:', e);
+    }
+}
+
+// Calculate decimal duration handling midnight crossing
+function getDurationHours(startStr, endStr) {
+    if (!startStr || !endStr) return 0;
+    const [sH, sM] = startStr.split(':').map(Number);
+    const [eH, eM] = endStr.split(':').map(Number);
+    
+    let startMin = sH * 60 + sM;
+    let endMin = eH * 60 + eM;
+    
+    if (endMin < startMin) {
+        // Crossed midnight
+        endMin += 24 * 60;
+    }
+    
+    return (endMin - startMin) / 60;
+}
+
+// Format duration from decimal hours to string (e.g. 8h 15m)
+function formatDurationText(decimalHours) {
+    const totalMinutes = Math.round(decimalHours * 60);
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    return `${hours}h ${minutes}m`;
+}
+
+// Format date into Indonesian locale readable
+function formatLocalDate(dateStr) {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+// --- EVENT LISTENERS ---
+function initEventListeners() {
+    // Folder Sync Button
+    const btnSyncFolder = document.getElementById('btn-sync-folder');
+    if (btnSyncFolder) {
+        btnSyncFolder.addEventListener('click', selectSyncFolder);
+    }
+
+    // Shift Start/End buttons
+    btnStartShift.addEventListener('click', startShift);
+    btnEndShift.addEventListener('click', endShift);
+
+    // Task Counter buttons
+    btnPlusTask.addEventListener('click', incrementTask);
+    btnMinusTask.addEventListener('click', decrementTask);
+
+    // Keyboard Shortcuts
+    document.addEventListener('keydown', handleKeyboardShortcuts);
+
+    // Filters
+    filterStartDate.addEventListener('change', () => {
+        const startVal = filterStartDate.value;
+        if (startVal) {
+            const startDate = new Date(startVal);
+            // 7 days inclusive: StartDate + 6 days
+            startDate.setDate(startDate.getDate() + 6);
+            
+            const year = startDate.getFullYear();
+            const month = String(startDate.getMonth() + 1).padStart(2, '0');
+            const day = String(startDate.getDate()).padStart(2, '0');
+            filterEndDate.value = `${year}-${month}-${day}`;
+        }
+        renderLogs();
+    });
+    filterEndDate.addEventListener('change', renderLogs);
+    btnResetFilters.addEventListener('click', resetFilters);
+    const btnClearFilters = document.getElementById('btn-clear-filters');
+    if (btnClearFilters) {
+        btnClearFilters.addEventListener('click', clearFilters);
+    }
+
+    // Export/Import
+    btnExportCsv.addEventListener('click', exportToCSV);
+    btnExportJson.addEventListener('click', exportToJSON);
+    btnImportJson.addEventListener('click', () => fileImportInput.click());
+    fileImportInput.addEventListener('change', importFromJSON);
+
+    // Modal Events
+    btnCloseModal.addEventListener('click', closeModal);
+    btnCancelEdit.addEventListener('click', closeModal);
+    btnSaveEdit.addEventListener('click', saveEdit);
+
+    // Set Now / Today Helper Buttons
+    const btnDateToday = document.getElementById('btn-date-today');
+    const btnStartNow = document.getElementById('btn-start-now');
+    const btnEndNow = document.getElementById('btn-end-now');
+    
+    if (btnDateToday) {
+        btnDateToday.addEventListener('click', () => {
+            if (activeShift) {
+                showToast('Cannot change date during active shift!', 'danger');
+                return;
+            }
+            shiftDateInput.value = getTodayDateString();
+            showToast('Shift date set to today.', 'success');
+            checkDailyLimitWarning();
+        });
+    }
+
+    if (btnStartNow) {
+        btnStartNow.addEventListener('click', () => {
+            if (activeShift) {
+                showToast('Cannot change start time during active shift!', 'danger');
+                return;
+            }
+            shiftStartInput.value = getCurrentTimeString();
+            showToast('Start time set to current time.', 'success');
+            checkDailyLimitWarning();
+        });
+    }
+
+    if (btnEndNow) {
+        btnEndNow.addEventListener('click', () => {
+            shiftEndInput.value = getCurrentTimeString();
+            showToast('End time set to current time.', 'success');
+            checkDailyLimitWarning();
+        });
+    }
+
+    // Attach shiftDateInput listener
+    if (shiftDateInput) {
+        shiftDateInput.addEventListener('change', checkDailyLimitWarning);
+    }
+
+    // Time Preset Buttons Helper
+    const modifyStepperTime = (prefix, mins, isStartInput) => {
+        if (isStartInput && activeShift) {
+            showToast('Cannot change start time during active shift!', 'danger');
+            return;
+        }
+        const currentTime = getStepperTime(prefix);
+        const [h, m] = currentTime.split(':').map(Number);
+        const tempDate = new Date();
+        tempDate.setHours(h, m, 0, 0);
+        tempDate.setMinutes(tempDate.getMinutes() + mins);
+        const nh = String(tempDate.getHours()).padStart(2, '0');
+        const nm = String(tempDate.getMinutes()).padStart(2, '0');
+        
+        if (isStartInput) {
+            shiftStartInput.value = `${nh}:${nm}`;
+        } else {
+            shiftEndInput.value = `${nh}:${nm}`;
+        }
+        checkDailyLimitWarning();
+    };
+
+    // Start Time Presets (+ / -)
+    const btnStartPlus15 = document.getElementById('btn-start-preset-plus15');
+    const btnStartPlus30 = document.getElementById('btn-start-preset-plus30');
+    const btnStartPlus1h = document.getElementById('btn-start-preset-plus1h');
+    const btnStartMinus15 = document.getElementById('btn-start-preset-minus15');
+    const btnStartMinus30 = document.getElementById('btn-start-preset-minus30');
+    const btnStartMinus1h = document.getElementById('btn-start-preset-minus1h');
+
+    if (btnStartPlus15) btnStartPlus15.addEventListener('click', () => modifyStepperTime('shift-start', 15, true));
+    if (btnStartPlus30) btnStartPlus30.addEventListener('click', () => modifyStepperTime('shift-start', 30, true));
+    if (btnStartPlus1h) btnStartPlus1h.addEventListener('click', () => modifyStepperTime('shift-start', 60, true));
+    if (btnStartMinus15) btnStartMinus15.addEventListener('click', () => modifyStepperTime('shift-start', -15, true));
+    if (btnStartMinus30) btnStartMinus30.addEventListener('click', () => modifyStepperTime('shift-start', -30, true));
+    if (btnStartMinus1h) btnStartMinus1h.addEventListener('click', () => modifyStepperTime('shift-start', -60, true));
+
+    // End Time Presets (+ / -)
+    const btnPresetPlus15 = document.getElementById('btn-preset-plus15');
+    const btnPresetPlus30 = document.getElementById('btn-preset-plus30');
+    const btnPresetPlus1h = document.getElementById('btn-preset-plus1h');
+    const btnPresetMinus15 = document.getElementById('btn-preset-minus15');
+    const btnPresetMinus30 = document.getElementById('btn-preset-minus30');
+    const btnPresetMinus1h = document.getElementById('btn-preset-minus1h');
+
+    if (btnPresetPlus15) btnPresetPlus15.addEventListener('click', () => modifyStepperTime('shift-end', 15, false));
+    if (btnPresetPlus30) btnPresetPlus30.addEventListener('click', () => modifyStepperTime('shift-end', 30, false));
+    if (btnPresetPlus1h) btnPresetPlus1h.addEventListener('click', () => modifyStepperTime('shift-end', 60, false));
+    if (btnPresetMinus15) btnPresetMinus15.addEventListener('click', () => modifyStepperTime('shift-end', -15, false));
+    if (btnPresetMinus30) btnPresetMinus30.addEventListener('click', () => modifyStepperTime('shift-end', -30, false));
+    if (btnPresetMinus1h) btnPresetMinus1h.addEventListener('click', () => modifyStepperTime('shift-end', -60, false));
+
+    // Phone QR Sync Modal Events
+    const btnSyncPhone = document.getElementById('btn-sync-phone');
+    const qrModal = document.getElementById('qr-modal');
+    const btnCloseQrModal = document.getElementById('btn-close-qr-modal');
+    const qrcodeContainer = document.getElementById('qrcode-container');
+    const qrLinkText = document.getElementById('qr-link-text');
+
+    if (btnSyncPhone && qrModal) {
+        btnSyncPhone.addEventListener('click', () => {
+            qrcodeContainer.innerHTML = '';
+            
+            // Reliable 24/7 Web App Client
+            const baseWebUrl = 'https://htmlpreview.github.io/?https://raw.githubusercontent.com/antigravity-apps/timetracker/main/index.html'; 
+            const syncUrl = `${baseWebUrl}&db=multimango-tracker-default-rtdb&auth=${FIREBASE_AUTH_KEY}`;
+            
+            if (qrLinkText) qrLinkText.textContent = syncUrl;
+
+            // Generate QR Code
+            new QRCode(qrcodeContainer, {
+                text: syncUrl,
+                width: 180,
+                height: 180,
+                colorDark: '#090d16',
+                colorLight: '#ffffff',
+                correctLevel: QRCode.CorrectLevel.H
+            });
+
+            qrModal.classList.add('active');
+        });
+    }
+
+    const btnCopyQrLink = document.getElementById('btn-copy-qr-link');
+    if (btnCopyQrLink) {
+        btnCopyQrLink.addEventListener('click', () => {
+            const linkText = qrLinkText ? qrLinkText.textContent : '';
+            if (linkText) {
+                navigator.clipboard.writeText(linkText).then(() => {
+                    showToast('Link copied to clipboard! Paste & open it in your phone browser.', 'success');
+                }).catch(() => {
+                    showToast('Could not copy link automatically.', 'danger');
+                });
+            }
+        });
+    }
+
+    if (btnCloseQrModal && qrModal) {
+        btnCloseQrModal.addEventListener('click', () => {
+            qrModal.classList.remove('active');
+        });
+    }
+}
+
+// --- SHIFT LOGIC ---
+
+function startShift() {
+    const date = shiftDateInput.value;
+    const start = shiftStartInput.value;
+
+    if (!date || !start) {
+        showToast('Please fill in Date and Start Time!', 'danger');
+        return;
+    }
+
+    // Automatically set End Time to Start Time + 1 hour
+    const [h, m] = start.split(':').map(Number);
+    const endHour = (h + 1) % 24;
+    const autoEndVal = `${String(endHour).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    setStepperTime('shift-end', autoEndVal);
+
+    activeShift = {
+        date: date,
+        startTime: start,
+        plannedEndTime: autoEndVal,
+        tasks: 0,
+        lastAddedTime: null,
+        counterHistory: []
+    };
+
+    saveData();
+    resumeActiveShift();
+    showToast('Shift started! End Time set to Start Time + 1h.', 'success');
+}
+
+function resumeActiveShift() {
+    // Update inputs to match active state
+    shiftDateInput.value = activeShift.date;
+    shiftStartInput.value = activeShift.startTime;
+    shiftDateInput.disabled = true;
+    shiftStartInput.disabled = true;
+    shiftEndInput.disabled = false;
+    
+    if (activeShift.plannedEndTime) {
+        setStepperTime('shift-end', activeShift.plannedEndTime);
+    }
+    // If no planned end time, leave the end stepper at whatever it shows — user can set it
+
+
+    btnStartShift.disabled = true;
+    btnStartShift.style.opacity = '0.5';
+    btnStartShift.style.cursor = 'not-allowed';
+    btnEndShift.disabled = false;
+    btnEndShift.style.opacity = '1';
+    btnEndShift.style.cursor = 'pointer';
+
+    shiftStatusText.textContent = 'Shift Active';
+    shiftStatusText.style.color = 'var(--accent-teal)';
+
+    // Update Counter Display
+    counterDisplay.textContent = activeShift.tasks;
+
+    if (!activeShift.counterHistory) {
+        activeShift.counterHistory = [];
+    }
+    renderCounterHistory();
+
+    // Start Live Timer
+    updateLiveTimer();
+    liveTimerInterval = setInterval(updateLiveTimer, 1000);
+}
+
+function updateLiveTimer() {
+    if (!activeShift) return;
+
+    const now = new Date();
+
+    // --- Elapsed duration: startTime → NOW ---
+    const [sH, sM] = activeShift.startTime.split(':').map(Number);
+    const startDate = new Date();
+    startDate.setHours(sH, sM, 0, 0);
+    // Handle midnight crossing (shift started before midnight, now is after)
+    if (startDate > now) startDate.setDate(startDate.getDate() - 1);
+
+    const elapsedMs   = now - startDate;
+    const totalSecs   = Math.floor(elapsedMs / 1000);
+    const hrs  = Math.floor(totalSecs / 3600);
+    const mins = Math.floor((totalSecs % 3600) / 60);
+    const secs = totalSecs % 60;
+    shiftDurationTimer.textContent = `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+
+    // --- Sisa Waktu / Overtime (only when user has set a planned end time) ---
+    const timeLeftEl = document.getElementById('shift-time-left');
+    if (!timeLeftEl) return;
+
+    if (activeShift.plannedEndTime) {
+        const [eH, eM] = activeShift.plannedEndTime.split(':').map(Number);
+        const endDate = new Date();
+        endDate.setHours(eH, eM, 0, 0);
+        // If planned end is before shift start (crosses midnight), shift to next day
+        if (endDate <= startDate) endDate.setDate(endDate.getDate() + 1);
+
+        const timeLeftMs = endDate - now;
+        if (timeLeftMs > 0) {
+            const tl = Math.floor(timeLeftMs / 1000);
+            timeLeftEl.textContent = `Sisa Waktu: ${String(Math.floor(tl/3600)).padStart(2,'0')}:${String(Math.floor((tl%3600)/60)).padStart(2,'0')}:${String(tl%60).padStart(2,'0')}`;
+            timeLeftEl.className = 'shift-time-left countdown';
+            timeLeftEl.style.display = 'inline-block';
+        } else {
+            const ot = Math.floor(Math.abs(timeLeftMs) / 1000);
+            timeLeftEl.textContent = `Overtime: ${String(Math.floor(ot/3600)).padStart(2,'0')}:${String(Math.floor((ot%3600)/60)).padStart(2,'0')}:${String(ot%60).padStart(2,'0')}`;
+            timeLeftEl.className = 'shift-time-left overtime';
+            timeLeftEl.style.display = 'inline-block';
+        }
+    } else {
+        timeLeftEl.style.display = 'none';
+    }
+}
+
+
+function updateUIForInactiveShift() {
+    // Reset buttons
+    btnStartShift.disabled = false;
+    btnStartShift.style.opacity = '1';
+    btnStartShift.style.cursor = 'pointer';
+    btnEndShift.disabled = true;
+    btnEndShift.style.opacity = '0.5';
+    btnEndShift.style.cursor = 'not-allowed';
+
+    shiftDateInput.disabled = false;
+    shiftStartInput.disabled = false;
+    shiftEndInput.disabled = false; // Allow configuring End Time pre-shift
+    shiftEndInput.value = '00:00';
+
+    shiftStatusText.textContent = 'Shift Inactive';
+    shiftStatusText.style.color = 'var(--text-muted)';
+    shiftDurationTimer.textContent = '00:00:00';
+    
+    const timeLeftEl = document.getElementById('shift-time-left');
+    if (timeLeftEl) {
+        timeLeftEl.style.display = 'none';
+        timeLeftEl.textContent = 'Sisa Waktu: 00:00:00';
+    }
+
+    counterDisplay.textContent = '0';
+    if (counterAuditLog) {
+        counterAuditLog.innerHTML = '<div class="audit-empty">No active shift.</div>';
+    }
+
+    // Clear intervals
+    if (liveTimerInterval) clearInterval(liveTimerInterval);
+}
+
+function endShift() {
+    if (!activeShift) return;
+
+    const end = shiftEndInput.value;
+
+    const duration = getDurationHours(activeShift.startTime, end);
+    if (duration <= 0) {
+        showToast('End Time must be later than Start Time!', 'danger');
+        return;
+    }
+
+    const newLog = {
+        id: Date.now().toString(),
+        date: activeShift.date,
+        startTime: activeShift.startTime,
+        endTime: end,
+        duration: duration,
+        tasks: activeShift.tasks,
+        rate: duration > 0 ? Number((activeShift.tasks / duration).toFixed(2)) : 0
+    };
+
+    logs.unshift(newLog); // add to top of array
+    activeShift = null;
+
+    saveData();
+    updateUIForInactiveShift();
+    renderLogs();
+    
+    showToast(`Shift saved successfully! ${newLog.tasks} tasks completed.`, 'success');
+}
+
+// --- TASK COUNTER LOGIC ---
+
+function incrementTask() {
+    if (!activeShift) {
+        showToast('Please Start Shift first to count tasks!', 'danger');
+        return;
+    }
+
+    activeShift.tasks += 1;
+    activeShift.lastAddedTime = Date.now();
+    
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    
+    if (!activeShift.counterHistory) activeShift.counterHistory = [];
+    activeShift.counterHistory.unshift({
+        time: timeStr,
+        action: '+1',
+        total: activeShift.tasks
+    });
+    
+    saveData();
+
+    // Trigger visual pop animation
+    counterDisplay.textContent = activeShift.tasks;
+    counterDisplay.classList.remove('increment-pop');
+    void counterDisplay.offsetWidth; // Trigger reflow
+    counterDisplay.classList.add('increment-pop');
+
+    renderCounterHistory();
+}
+
+function decrementTask() {
+    if (!activeShift) {
+        showToast('Please Start Shift first to count tasks!', 'danger');
+        return;
+    }
+
+    if (activeShift.tasks <= 0) return;
+
+    activeShift.tasks -= 1;
+    
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    
+    if (!activeShift.counterHistory) activeShift.counterHistory = [];
+    activeShift.counterHistory.unshift({
+        time: timeStr,
+        action: '-1',
+        total: activeShift.tasks
+    });
+    
+    saveData();
+
+    counterDisplay.textContent = activeShift.tasks;
+    renderCounterHistory();
+}
+
+function renderCounterHistory() {
+    if (!counterAuditLog) return;
+    
+    if (!activeShift || !activeShift.counterHistory || activeShift.counterHistory.length === 0) {
+        counterAuditLog.innerHTML = '<div class="audit-empty">No activity logged yet.</div>';
+        return;
+    }
+    
+    counterAuditLog.innerHTML = activeShift.counterHistory.map(item => `
+        <div class="audit-item">
+            <span class="audit-time">${item.time}</span>
+            <span class="audit-action ${item.action.startsWith('+') ? 'plus' : 'minus'}">${item.action}</span>
+            <span class="audit-total">Total: ${item.total}</span>
+        </div>
+    `).join('');
+}
+
+// Keyboard shortcuts mapping
+function handleKeyboardShortcuts(e) {
+    // If user is typing in an input field, do not trigger shortcuts
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+    if (e.code === 'Space' || e.key === '+' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        incrementTask();
+    } else if (e.key === '-' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        decrementTask();
+    }
+}
+
+// --- LOG RENDERING & STATS ---
+
+// Track open daily detail rows
+const expandedDates = new Set();
+
+function toggleDailyDetail(dateStr) {
+    if (expandedDates.has(dateStr)) {
+        expandedDates.delete(dateStr);
+    } else {
+        expandedDates.add(dateStr);
+    }
+    renderLogs();
+}
+
+function renderLogs() {
+    const startFilter = filterStartDate.value;
+    const endFilter = filterEndDate.value;
+
+    let filtered = logs;
+
+    if (startFilter) {
+        filtered = filtered.filter(log => log.date >= startFilter);
+    }
+    if (endFilter) {
+        filtered = filtered.filter(log => log.date <= endFilter);
+    }
+
+    logsTbody.innerHTML = '';
+
+    if (filtered.length === 0) {
+        emptyState.style.display = 'flex';
+    } else {
+        emptyState.style.display = 'none';
+
+        // Group filtered logs by Date (YYYY-MM-DD)
+        const groups = {};
+        filtered.forEach(log => {
+            if (!groups[log.date]) {
+                groups[log.date] = [];
+            }
+            groups[log.date].push(log);
+        });
+
+        // Sort dates descending (newest first)
+        const sortedDates = Object.keys(groups).sort().reverse();
+
+        sortedDates.forEach(dateStr => {
+            const shiftList = groups[dateStr];
+            // Sort shifts chronologically by startTime ascending (earliest first)
+            shiftList.sort((a, b) => a.startTime.localeCompare(b.startTime));
+
+            let dayTasks = 0;
+            let dayHours = 0;
+
+            shiftList.forEach(item => {
+                dayTasks += item.tasks;
+                dayHours += item.duration;
+            });
+
+            const dayRate = dayHours > 0 ? (dayTasks / dayHours).toFixed(2) : '0.00';
+            
+            // Limit paid hours to 10 hours daily max
+            const dayHoursPaid = Math.min(10, dayHours);
+            const dayPaymentUsd = dayHoursPaid * 5;
+            const isCapped = dayHours > 10;
+            
+            const isExpanded = expandedDates.has(dateStr);
+
+            // 1. Cumulative Summary Row (8 Columns)
+            const mainTr = document.createElement('tr');
+            mainTr.className = `daily-summary-row ${isExpanded ? 'expanded' : ''}`;
+            mainTr.onclick = () => toggleDailyDetail(dateStr);
+            mainTr.title = "Click to expand/collapse shift details";
+
+            mainTr.innerHTML = `
+                <td class="col-expand"><span class="expand-icon">${isExpanded ? '▼' : '▶'}</span></td>
+                <td class="col-date"><strong>${formatLocalDate(dateStr)}</strong></td>
+                <td class="col-shifts"><span class="badge badge-mango">${shiftList.length} shift${shiftList.length > 1 ? 's' : ''}</span></td>
+                <td class="col-duration">${dayHours.toFixed(2)}h</td>
+                <td class="col-tasks"><strong>${dayTasks}</strong></td>
+                <td class="col-rate">${dayRate}/hr</td>
+                <td class="col-payment">
+                    <strong style="color: ${isCapped ? 'var(--mango-primary)' : 'var(--accent-teal)'};">
+                        ${formatPaymentIDR(dayPaymentUsd)}
+                    </strong>
+                    <span style="font-size: 0.72rem; color: var(--text-muted); display: block; margin-top: 0.1rem;">$${dayPaymentUsd.toFixed(2)}</span>
+                    ${isCapped ? '<span style="font-size: 0.65rem; color: var(--mango-primary); display:block; font-weight:normal; margin-top: 0.15rem;">Capped (10h)</span>' : ''}
+                </td>
+                <td class="col-action"></td>
+            `;
+            logsTbody.appendChild(mainTr);
+
+            // 2. Expandable Shift Detail Sub-Rows (8 Columns)
+            if (isExpanded) {
+                shiftList.forEach((log, sIndex) => {
+                    const globalIndex = logs.findIndex(item => item.id === log.id);
+                    const shiftPaymentUsd = log.duration * 5;
+                    const subTr = document.createElement('tr');
+                    subTr.className = 'daily-detail-row';
+                    subTr.innerHTML = `
+                        <td class="col-expand"></td>
+                        <td class="col-date" style="padding-left: 1.25rem; font-size: 0.8rem; color: var(--text-muted);">
+                            <span style="opacity: 0.5;">└</span> Shift #${sIndex + 1}
+                        </td>
+                        <td class="col-shifts"><span class="badge" style="background: rgba(255,255,255,0.06); color: var(--text-main); border: 1px solid var(--card-border);">${log.startTime} - ${log.endTime}</span></td>
+                        <td class="col-duration">${log.duration.toFixed(2)}h</td>
+                        <td class="col-tasks">${log.tasks}</td>
+                        <td class="col-rate">${log.rate.toFixed(2)}/hr</td>
+                        <td class="col-payment" style="color: var(--text-muted);">
+                            <span>${formatPaymentIDR(shiftPaymentUsd)}</span>
+                            <span style="font-size: 0.72rem; color: var(--text-dimmed); display: block; margin-top: 0.1rem;">$${shiftPaymentUsd.toFixed(2)}</span>
+                        </td>
+                        <td class="col-action" onclick="event.stopPropagation();">
+                            <div class="action-buttons">
+                                <button class="btn-action" onclick="openEditModal(${globalIndex})" title="Edit Log">
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg>
+                                </button>
+                                <button class="btn-action btn-action-delete" onclick="deleteLog('${log.id}')" title="Delete Log">
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                                </button>
+                            </div>
+                        </td>
+                    `;
+                    logsTbody.appendChild(subTr);
+                });
+            }
+        });
+    }
+
+    calculateStats(filtered);
+}
+
+function calculateStats(filteredList) {
+    let totalTasks = 0;
+    let totalHours = 0;
+    
+    // Calculate total hours paid with 10 hours daily cap applied
+    const dailyHoursMap = {};
+    filteredList.forEach(log => {
+        totalTasks += log.tasks;
+        totalHours += log.duration;
+        
+        // Group hours by date to apply cap
+        if (!dailyHoursMap[log.date]) {
+            dailyHoursMap[log.date] = 0;
+        }
+        dailyHoursMap[log.date] += log.duration;
+    });
+
+    let totalHoursPaid = 0;
+    Object.keys(dailyHoursMap).forEach(date => {
+        totalHoursPaid += Math.min(10, dailyHoursMap[date]);
+    });
+
+    const averageRate = totalHours > 0 ? (totalTasks / totalHours).toFixed(2) : '0.00';
+    const totalPaymentUsd = totalHoursPaid * 5;
+
+    statTotalTasks.textContent = totalTasks;
+    statTotalHours.textContent = `${totalHours.toFixed(2)} hrs (${formatDurationText(totalHours)})`;
+    statAvgRate.textContent = `${averageRate} tasks/hr`;
+    
+    const statTotalPayment = document.getElementById('stat-total-payment');
+    if (statTotalPayment) {
+        statTotalPayment.innerHTML = `
+            ${formatPaymentIDR(totalPaymentUsd)}
+            <div style="font-size: 0.78rem; color: var(--text-muted); font-weight: 500; margin-top: 0.2rem;">($${totalPaymentUsd.toFixed(2)})</div>
+        `;
+    }
+}
+
+function resetFilters() {
+    const todayStr = getTodayDateString();
+    filterStartDate.value = todayStr;
+    filterEndDate.value = todayStr;
+    renderLogs();
+    showToast('Filters reset to Today', 'info');
+}
+
+function clearFilters() {
+    filterStartDate.value = '';
+    filterEndDate.value = '';
+    renderLogs();
+    showToast('Showing all historical logs', 'info');
+}
+
+// --- DELETE LOG ---
+window.deleteLog = function(id) {
+    if (confirm('Are you sure you want to delete this shift report?')) {
+        logs = logs.filter(log => log.id !== id);
+        saveData();
+        renderLogs();
+        showToast('Shift report deleted', 'success');
+    }
+};
+
+// --- EDIT MODAL LOGIC ---
+window.openEditModal = function(index) {
+    const log = logs[index];
+    editIndexInput.value = index;
+    editDateInput.value = log.date;
+    editStartInput.value = log.startTime;
+    editEndInput.value = log.endTime;
+    editTasksInput.value = log.tasks;
+    
+    editModal.classList.add('active');
+};
+
+function closeModal() {
+    editModal.classList.remove('active');
+}
+
+function saveEdit() {
+    const index = parseInt(editIndexInput.value);
+    const date = editDateInput.value;
+    const start = editStartInput.value;
+    const end = editEndInput.value;
+    const tasks = parseInt(editTasksInput.value);
+
+    if (!date || !start || !end || isNaN(tasks) || tasks < 0) {
+        showToast('Please fill in all details correctly!', 'danger');
+        return;
+    }
+
+    const duration = getDurationHours(start, end);
+    if (duration <= 0) {
+        showToast('End Time must be later than Start Time!', 'danger');
+        return;
+    }
+
+    logs[index].date = date;
+    logs[index].startTime = start;
+    logs[index].endTime = end;
+    logs[index].tasks = tasks;
+    logs[index].duration = duration;
+    logs[index].rate = duration > 0 ? Number((tasks / duration).toFixed(2)) : 0;
+
+    saveData();
+    closeModal();
+    renderLogs();
+    showToast('Shift report updated successfully', 'success');
+}
+
+// --- CSV & JSON PORTABILITY ---
+
+function exportToCSV() {
+    if (logs.length === 0) {
+        showToast('No shift logs to export!', 'danger');
+        return;
+    }
+
+    let csvContent = "data:text/csv;charset=utf-8,";
+    csvContent += "Date,Start Time,End Time,Duration (Hrs),Tasks Completed,Rate (Tasks/Hr)\r\n";
+
+    logs.forEach(log => {
+        csvContent += `${log.date},${log.startTime},${log.endTime},${log.duration.toFixed(2)},${log.tasks},${log.rate.toFixed(2)}\r\n`;
+    });
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `multimango_shift_report_${getTodayDateString()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    showToast('CSV report downloaded!', 'success');
+}
+
+function exportToJSON() {
+    if (logs.length === 0) {
+        showToast('No shift logs to backup!', 'danger');
+        return;
+    }
+
+    const jsonStr = JSON.stringify(logs, null, 2);
+    const blob = new Blob([jsonStr], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `multimango_backup_${getTodayDateString()}.json`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    showToast('Backup JSON file downloaded!', 'success');
+}
+
+function importFromJSON(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(evt) {
+        try {
+            const importedLogs = JSON.parse(evt.target.result);
+            if (!Array.isArray(importedLogs)) {
+                throw new Error("Invalid file content format (must be JSON array)");
+            }
+            
+            // Basic schema check
+            const isValid = importedLogs.every(item => item.date && item.startTime && item.endTime && item.id);
+            if (!isValid) {
+                throw new Error("Invalid backup schema structure!");
+            }
+
+            if (confirm(`Do you want to merge ${importedLogs.length} logs with your existing logs? (Matching IDs will be updated)`)) {
+                // Merge logs
+                const existingMap = new Map(logs.map(item => [item.id, item]));
+                importedLogs.forEach(item => {
+                    existingMap.set(item.id, item);
+                });
+                logs = Array.from(existingMap.values());
+                // Sort descending by id (timestamp) or date
+                logs.sort((a, b) => b.id.localeCompare(a.id));
+                
+                saveData();
+                renderLogs();
+                showToast('Database imported and merged successfully!', 'success');
+            }
+        } catch (error) {
+            showToast(`Import failed: ${error.message}`, 'danger');
+        }
+        // Reset file input value
+        fileImportInput.value = '';
+    };
+    reader.readAsText(file);
+}

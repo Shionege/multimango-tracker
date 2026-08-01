@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multimango Time & Task Tracker</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- HEADER -->
+        <header>
+            <h1>Multimango <span>Tracker</span></h1>
+            <div class="header-right-group">
+                <button id="btn-sync-folder" class="sync-pill-btn" title="Link local folder for cross-browser auto-sync">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                    <span id="sync-folder-label">Link Folder</span>
+                </button>
+                <div class="system-status">
+                    <span class="status-dot"></span>
+                    <span id="current-date-time">Loading...</span>
+                </div>
+            </div>
+        </header>
+
+
+        <!-- DASHBOARD GRID -->
+        <main class="dashboard-grid">
+            
+            <!-- PANEL 1: SHIFT CONTROL -->
+            <section class="card shift-card">
+                <h2 class="card-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                    Shift Management
+                </h2>
+                <div class="shift-controls">
+                    <!-- Row 1: Date on Left, Empty Spacer on Right -->
+                    <div class="input-group shift-date-group">
+                        <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                            <label for="shift-date">Shift Date</label>
+                            <button type="button" class="btn-text-link" id="btn-date-today">Set Today</button>
+                        </div>
+                        <input type="date" id="shift-date">
+                    </div>
+                    <div class="shift-spacer"></div>
+                    
+                    <!-- Row 2: Start Time on Left, End Time on Right -->
+                    <div class="input-group">
+                        <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                            <label>Start Time</label>
+                            <button type="button" class="btn-text-link" id="btn-start-now">Set Now</button>
+                        </div>
+                        <div style="display: flex; justify-content: center; gap: 0.5rem; margin-bottom: 0.3rem;">
+                            <button type="button" class="btn-preset-capsule" id="btn-start-preset-plus15">+15m</button>
+                            <button type="button" class="btn-preset-capsule" id="btn-start-preset-plus30">+30m</button>
+                            <button type="button" class="btn-preset-capsule" id="btn-start-preset-plus1h">+1h</button>
+                        </div>
+                        <div class="time-stepper" id="shift-start-stepper">
+                            <div class="stepper-col">
+                                <button class="stepper-btn" id="shift-start-hour-up" tabindex="-1">&#9650;</button>
+                                <input class="stepper-input" id="shift-start-hour" type="number" min="0" max="23" value="0">
+                                <button class="stepper-btn" id="shift-start-hour-down" tabindex="-1">&#9660;</button>
+                            </div>
+                            <div class="stepper-sep">:</div>
+                            <div class="stepper-col">
+                                <button class="stepper-btn" id="shift-start-min-up" tabindex="-1">&#9650;</button>
+                                <input class="stepper-input" id="shift-start-min" type="number" min="0" max="59" value="0">
+                                <button class="stepper-btn" id="shift-start-min-down" tabindex="-1">&#9660;</button>
+                            </div>
+                        </div>
+                        <div style="display: flex; justify-content: center; gap: 0.5rem; margin-top: 0.3rem;">
+                            <button type="button" class="btn-preset-capsule" id="btn-start-preset-minus15">-15m</button>
+                            <button type="button" class="btn-preset-capsule" id="btn-start-preset-minus30">-30m</button>
+                            <button type="button" class="btn-preset-capsule" id="btn-start-preset-minus1h">-1h</button>
+                        </div>
+                    </div>
+                    <div class="input-group">
+                        <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                            <label>End Time</label>
+                            <button type="button" class="btn-text-link" id="btn-end-now">Set Now</button>
+                        </div>
+                        <div style="display: flex; justify-content: center; gap: 0.5rem; margin-bottom: 0.3rem;">
+                            <button type="button" class="btn-preset-capsule" id="btn-preset-plus15">+15m</button>
+                            <button type="button" class="btn-preset-capsule" id="btn-preset-plus30">+30m</button>
+                            <button type="button" class="btn-preset-capsule" id="btn-preset-plus1h">+1h</button>
+                        </div>
+                        <div class="time-stepper" id="shift-end-stepper">
+                            <div class="stepper-col">
+                                <button class="stepper-btn" id="shift-end-hour-up" tabindex="-1">&#9650;</button>
+                                <input class="stepper-input" id="shift-end-hour" type="number" min="0" max="23" value="0">
+                                <button class="stepper-btn" id="shift-end-hour-down" tabindex="-1">&#9660;</button>
+                            </div>
+                            <div class="stepper-sep">:</div>
+                            <div class="stepper-col">
+                                <button class="stepper-btn" id="shift-end-min-up" tabindex="-1">&#9650;</button>
+                                <input class="stepper-input" id="shift-end-min" type="number" min="0" max="59" value="0">
+                                <button class="stepper-btn" id="shift-end-min-down" tabindex="-1">&#9660;</button>
+                            </div>
+                        </div>
+                        <div style="display: flex; justify-content: center; gap: 0.5rem; margin-top: 0.3rem;">
+                            <button type="button" class="btn-preset-capsule" id="btn-preset-minus15">-15m</button>
+                            <button type="button" class="btn-preset-capsule" id="btn-preset-minus30">-30m</button>
+                            <button type="button" class="btn-preset-capsule" id="btn-preset-minus1h">-1h</button>
+                        </div>
+                        <div id="end-time-limit-warning" style="display: none; text-align: center; color: var(--danger); font-size: 0.72rem; font-weight: 600; margin-top: 0.4rem; text-shadow: 0 0 8px rgba(239, 68, 68, 0.25);">
+                            ⚠️ Plan exceeds 10h daily limit
+                        </div>
+                    </div>
+
+                    <!-- Row 3: Start Button on Left, End Button on Right -->
+                    <button id="btn-start-shift" class="btn btn-primary">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                        Start Shift
+                    </button>
+                    <button id="btn-end-shift" class="btn btn-danger" disabled style="opacity: 0.5; cursor: not-allowed;">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>
+                        End Shift
+                    </button>
+
+                    <!-- Row 4: Full width status container -->
+                    <div class="shift-status-container">
+                        <div class="shift-status-label" id="shift-status-text">Shift Inactive</div>
+                        <div class="shift-timer" id="shift-duration-timer">00:00:00</div>
+                        <div class="shift-time-left" id="shift-time-left" style="display: none;">Sisa Waktu: 00:00:00</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- PANEL 2: TASK COUNTER -->
+            <section class="card counter-card" style="display: flex; flex-direction: column; justify-content: space-between;">
+                <h2 class="card-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="9" y1="15" x2="15" y2="15"></line><line x1="12" y1="12" x2="12" y2="18"></line></svg>
+                    Task Counter
+                </h2>
+                
+                <div class="counter-wrapper">
+                    <div class="counter-value" id="counter-display">0</div>
+                    
+                    <div class="counter-buttons">
+                        <button id="btn-minus-task" class="btn-counter btn-minus" title="Press Minus Key">-</button>
+                        <button id="btn-plus-task" class="btn-counter btn-plus" title="Press Space or Plus Key">+</button>
+                    </div>
+                    
+                    <div class="counter-audit-container" style="width: 100%; margin-top: 1rem;">
+                        <div style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted); margin-bottom: 0.4rem; text-align: left; text-transform: uppercase; letter-spacing: 0.05em;">Shift Audit Log</div>
+                        <div class="counter-audit-log" id="counter-audit-log">
+                            <div class="audit-empty">No activity logged yet.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="keyboard-shortcuts-hint">
+                    <span><kbd class="key-badge">Space</kbd> / <kbd class="key-badge">+</kbd> / <kbd class="key-badge">↑</kbd> Add</span>
+                    <span><kbd class="key-badge">-</kbd> / <kbd class="key-badge">↓</kbd> Subtract</span>
+                </div>
+            </section>
+
+
+        </main>
+
+        <!-- BOTTOM PANEL: HISTORICAL LOGS -->
+        <section class="logs-section">
+            
+            <!-- USEFUL LINKS BAR -->
+            <div class="useful-links-bar">
+                <span class="links-title">Useful Links:</span>
+                <a href="https://docs.google.com/forms/d/e/1FAIpQLSfgJryGmoo4V94yhScUfVHWRCNxVHH9dmPtpKpn2_FVwx7-LA/viewform" target="_blank" class="useful-link">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                    Track Payment Progress
+                </a>
+                <a href="https://docs.google.com/forms/d/e/1FAIpQLSeCZe3SDh8Ll-b9u45DKw7k-iSXIFZFWizmOKoAAxhbt8DqAA/viewform" target="_blank" class="useful-link">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                    Submit Timesheet Report
+                </a>
+                <div style="margin-left: auto; display: flex; align-items: center; gap: 1rem;">
+                    <span id="rate-exchange-info" style="font-size: 0.76rem; color: var(--text-muted); font-weight: 500; display: inline-flex; align-items: center; gap: 0.25rem;">Rate: $1 = Rp --.---</span>
+                    <span style="font-size: 0.76rem; opacity: 0.25;">|</span>
+                    <span id="cloud-sync-status" style="font-size: 0.76rem; color: var(--text-muted); font-weight: 500; display: inline-flex; align-items: center; gap: 0.25rem;">● Cloud: Offline</span>
+                </div>
+            </div>
+
+            <!-- FILTERS BAR (MINIMALIST & ABOVE STATS) -->
+            <div class="filters-bar-mini">
+                <div class="filters-mini-left">
+                    <div class="filter-mini-item">
+                        <label for="filter-start-date">From:</label>
+                        <input type="date" id="filter-start-date">
+                    </div>
+                    <div class="filter-mini-item">
+                        <label for="filter-end-date">To:</label>
+                        <input type="date" id="filter-end-date">
+                    </div>
+                    <button id="btn-reset-filters" class="btn-mini" title="Reset date filter to Today">
+                        Today
+                    </button>
+                    <button id="btn-clear-filters" class="btn-mini" title="Show All History">
+                        Show All
+                    </button>
+                    
+                    <!-- Dropdown More -->
+                    <div class="dropdown-container">
+                        <button type="button" class="btn-mini" id="btn-more-trigger">
+                            More ▼
+                        </button>
+                        <div class="dropdown-content">
+                            <button type="button" id="btn-export-csv" class="dropdown-item-btn">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 4px; opacity: 0.8;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                                Export CSV
+                            </button>
+                            <button type="button" id="btn-export-json" class="dropdown-item-btn">
+                                Backup (JSON)
+                            </button>
+                            <button type="button" id="btn-import-json" class="dropdown-item-btn">
+                                Import (JSON)
+                            </button>
+                            <button type="button" id="btn-sync-phone" class="dropdown-item-btn">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 4px; opacity: 0.8;"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
+                                Sync Phone (QR)
+                            </button>
+                        </div>
+                    </div>
+                    <input type="file" id="file-import-input" accept=".json" style="display: none;">
+                </div>
+            </div>
+
+            <!-- STATS BAR (PERIODE FILTERED) -->
+            <section class="stats-bar">
+                <div class="stat-bar-item">
+                    <span class="stat-bar-label">Tasks Finished</span>
+                    <span class="stat-bar-value highlight-mango" id="stat-total-tasks">0</span>
+                </div>
+                <div class="stat-bar-divider"></div>
+                <div class="stat-bar-item">
+                    <span class="stat-bar-label">Total Time Worked</span>
+                    <span class="stat-bar-value highlight-teal" id="stat-total-hours">0.0 hrs</span>
+                </div>
+                <div class="stat-bar-divider"></div>
+                <div class="stat-bar-item">
+                    <span class="stat-bar-label">Average Productivity Rate</span>
+                    <span class="stat-bar-value" id="stat-avg-rate">0.00 tasks/hr</span>
+                </div>
+                <div class="stat-bar-divider"></div>
+                <div class="stat-bar-item">
+                    <span class="stat-bar-label">Total Payment ($5/hr)</span>
+                    <span class="stat-bar-value highlight-mango" id="stat-total-payment">$0.00</span>
+                </div>
+            </section>
+
+            <!-- CUMULATIVE DAILY LOG TABLE -->
+            <div class="table-container">
+                <table class="history-table" id="logs-table">
+                    <thead>
+                        <tr>
+                            <th class="col-expand" style="width: 24px;"></th>
+                            <th class="col-date">Date</th>
+                            <th class="col-shifts">Time / Shifts</th>
+                            <th class="col-duration">Hours</th>
+                            <th class="col-tasks">Tasks</th>
+                            <th class="col-rate">Rate</th>
+                            <th class="col-payment">Payment</th>
+                            <th class="col-action" style="text-align: right;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logs-tbody">
+                        <!-- Grouped by Date dynamically via JavaScript -->
+                    </tbody>
+                </table>
+                <div class="empty-state" id="empty-state" style="display: none;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                        <line x1="16" y1="2" x2="16" y2="6"></line>
+                        <line x1="8" y1="2" x2="8" y2="6"></line>
+                        <line x1="3" y1="10" x2="21" y2="10"></line>
+                    </svg>
+                    <div>No shift reports logged yet. Start a shift above or adjust your filter.</div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- EDIT LOG MODAL -->
+    <div class="modal-overlay" id="edit-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Edit Shift Report</h3>
+                <button class="close-modal" id="btn-close-modal">&times;</button>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+                <input type="hidden" id="edit-index">
+                <div class="input-group">
+                    <label for="edit-date">Shift Date</label>
+                    <input type="date" id="edit-date">
+                </div>
+                <div class="input-row">
+                    <div class="input-group">
+                        <label>Start Time</label>
+                        <div class="time-stepper" id="edit-start-stepper">
+                            <div class="stepper-col">
+                                <button class="stepper-btn" id="edit-start-hour-up" tabindex="-1">&#9650;</button>
+                                <input class="stepper-input" id="edit-start-hour" type="number" min="0" max="23" value="0">
+                                <button class="stepper-btn" id="edit-start-hour-down" tabindex="-1">&#9660;</button>
+                            </div>
+                            <div class="stepper-sep">:</div>
+                            <div class="stepper-col">
+                                <button class="stepper-btn" id="edit-start-min-up" tabindex="-1">&#9650;</button>
+                                <input class="stepper-input" id="edit-start-min" type="number" min="0" max="59" value="0">
+                                <button class="stepper-btn" id="edit-start-min-down" tabindex="-1">&#9660;</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="input-group">
+                        <label>End Time</label>
+                        <div class="time-stepper" id="edit-end-stepper">
+                            <div class="stepper-col">
+                                <button class="stepper-btn" id="edit-end-hour-up" tabindex="-1">&#9650;</button>
+                                <input class="stepper-input" id="edit-end-hour" type="number" min="0" max="23" value="0">
+                                <button class="stepper-btn" id="edit-end-hour-down" tabindex="-1">&#9660;</button>
+                            </div>
+                            <div class="stepper-sep">:</div>
+                            <div class="stepper-col">
+                                <button class="stepper-btn" id="edit-end-min-up" tabindex="-1">&#9650;</button>
+                                <input class="stepper-input" id="edit-end-min" type="number" min="0" max="59" value="0">
+                                <button class="stepper-btn" id="edit-end-min-down" tabindex="-1">&#9660;</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label for="edit-tasks">Tasks Completed</label>
+                    <input type="number" id="edit-tasks" min="0" style="background: rgba(255,255,255,0.03); border: 1px solid var(--card-border); color: white; padding: 0.75rem 1rem; border-radius: 10px; font-family: inherit; font-size: 1rem;">
+                </div>
+                <div class="modal-actions">
+                    <button id="btn-cancel-edit" class="btn btn-secondary">Cancel</button>
+                    <button id="btn-save-edit" class="btn btn-primary">Save Changes</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- QR SYNC MODAL -->
+    <div id="qr-modal" class="modal-overlay">
+        <div class="modal-box" style="max-width: 380px; text-align: center;">
+            <div class="modal-header" style="justify-content: center; position: relative;">
+                <h3 style="font-size: 1.15rem; font-weight: 700; margin: 0;">Scan to Access on Phone</h3>
+                <button type="button" id="btn-close-qr-modal" style="position: absolute; right: 0; top: 0; background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 1.2rem;">✕</button>
+            </div>
+            <div class="modal-body" style="padding: 1rem 0; display: flex; flex-direction: column; align-items: center; gap: 1rem;">
+                <div id="qrcode-container" style="background: white; padding: 0.75rem; border-radius: 12px; display: inline-block;"></div>
+                <p style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.5; margin: 0 1rem;">
+                    Scan this QR code using your phone camera to instantly sync and view your logs & payment rate on your mobile screen.
+                </p>
+                <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--card-border); padding: 0.5rem 0.75rem; border-radius: 8px; font-size: 0.76rem; width: 100%; word-break: break-all; color: var(--mango-primary); font-family: 'JetBrains Mono', monospace;">
+                    <span id="qr-link-text"></span>
+                </div>
+                <button type="button" id="btn-copy-qr-link" class="btn btn-secondary" style="font-size: 0.78rem; padding: 0.4rem 0.8rem; width: 100%;">
+                    📋 Copy Link for Phone Browser
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- TOAST NOTIFICATION CONTAINER -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

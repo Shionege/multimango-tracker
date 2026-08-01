@@ -498,7 +498,8 @@ async function saveToCloud() {
         statusEl.style.color = 'var(--mango-primary)';
     }
 
-    const url = `${FIREBASE_DB_URL}.json?auth=${FIREBASE_AUTH_KEY}`;
+    // Use clean node data.json. Since rules are public, we do not need auth parameters.
+    const url = `${FIREBASE_DB_URL}data.json`;
     const payload = {
         logs: logs,
         activeShift: activeShift,
@@ -535,7 +536,7 @@ async function fetchFromCloud() {
         statusEl.style.color = 'var(--mango-primary)';
     }
 
-    const url = `${FIREBASE_DB_URL}.json?auth=${FIREBASE_AUTH_KEY}`;
+    const url = `${FIREBASE_DB_URL}data.json`;
     try {
         const res = await fetch(url);
         if (res.ok) {
@@ -814,7 +815,7 @@ function initEventListeners() {
             
             // Official Shionege GitHub Pages 24/7 Hosting Client
             const baseWebUrl = 'https://shionege.github.io/multimango-tracker/'; 
-            const syncUrl = `${baseWebUrl}?db=multimango-tracker-default-rtdb&auth=${FIREBASE_AUTH_KEY}`;
+            const syncUrl = `${baseWebUrl}?db=multimango-tracker-default-rtdb`;
             
             if (qrLinkText) qrLinkText.textContent = syncUrl;
 

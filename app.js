@@ -225,6 +225,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 8. Initial render of history and statistics
     renderLogs();
+
+    // 9. Periodic Live Cloud Polling (Every 10 seconds for seamless HP-Laptop sync)
+    setInterval(fetchFromCloud, 10000);
 });
 
 // --- EXCHANGE RATE STATE & HELPERS ---
@@ -498,7 +501,6 @@ async function saveToCloud() {
         statusEl.style.color = 'var(--mango-primary)';
     }
 
-    // Use clean node data.json. Since rules are public, we do not need auth parameters.
     const url = `${FIREBASE_DB_URL}data.json`;
     const payload = {
         logs: logs,
@@ -518,7 +520,7 @@ async function saveToCloud() {
                 statusEl.style.color = 'var(--success)';
             }
         } else {
-            throw new Error('Cloud HTTP error');
+            throw new Error('Cloud HTTP error ' + res.status);
         }
     } catch (e) {
         console.warn('Cloud auto-sync failed:', e);
@@ -541,21 +543,38 @@ async function fetchFromCloud() {
         const res = await fetch(url);
         if (res.ok) {
             const data = await res.json();
-            if (data) {
+            
+            if (data === null) {
+                // Cloud DB is valid but empty; if we have local logs, upload them to initialize cloud
+                if (logs.length > 0 || activeShift) {
+                    await saveToCloud();
+                } else if (statusEl) {
+                    statusEl.innerHTML = '● Cloud: Synced';
+                    statusEl.style.color = 'var(--success)';
+                }
+                return true;
+            }
+
+            if (data && typeof data === 'object') {
                 let hasChanges = false;
                 if (data.logs && Array.isArray(data.logs)) {
-                    logs = data.logs;
-                    localStorage.setItem('multimango_logs', JSON.stringify(logs));
-                    hasChanges = true;
+                    // Sync if cloud data is different from local
+                    if (JSON.stringify(logs) !== JSON.stringify(data.logs)) {
+                        logs = data.logs;
+                        localStorage.setItem('multimango_logs', JSON.stringify(logs));
+                        hasChanges = true;
+                    }
                 }
                 if (data.hasOwnProperty('activeShift')) {
-                    activeShift = data.activeShift;
-                    if (activeShift) {
-                        localStorage.setItem('multimango_active_shift', JSON.stringify(activeShift));
-                    } else {
-                        localStorage.removeItem('multimango_active_shift');
+                    if (JSON.stringify(activeShift) !== JSON.stringify(data.activeShift)) {
+                        activeShift = data.activeShift;
+                        if (activeShift) {
+                            localStorage.setItem('multimango_active_shift', JSON.stringify(activeShift));
+                        } else {
+                            localStorage.removeItem('multimango_active_shift');
+                        }
+                        hasChanges = true;
                     }
-                    hasChanges = true;
                 }
                 
                 if (hasChanges) {
@@ -572,7 +591,7 @@ async function fetchFromCloud() {
             }
         }
     } catch (e) {
-        console.warn('Could not sync-down from cloud on load:', e);
+        console.warn('Could not fetch from cloud:', e);
     }
     
     if (statusEl) {
@@ -814,8 +833,7 @@ function initEventListeners() {
             qrcodeContainer.innerHTML = '';
             
             // Official Shionege GitHub Pages 24/7 Hosting Client
-            const baseWebUrl = 'https://shionege.github.io/multimango-tracker/'; 
-            const syncUrl = `${baseWebUrl}?db=multimango-tracker-default-rtdb`;
+            const syncUrl = 'https://shionege.github.io/multimango-tracker/';
             
             if (qrLinkText) qrLinkText.textContent = syncUrl;
 

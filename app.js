@@ -558,9 +558,9 @@ async function fetchFromCloud() {
             if (data && typeof data === 'object') {
                 let hasChanges = false;
                 if (data.logs && Array.isArray(data.logs)) {
-                    // Sync if cloud data is different from local
-                    if (JSON.stringify(logs) !== JSON.stringify(data.logs)) {
-                        logs = data.logs;
+                    const cleanLogs = deduplicateLogs(data.logs);
+                    if (JSON.stringify(logs) !== JSON.stringify(cleanLogs)) {
+                        logs = cleanLogs;
                         localStorage.setItem('multimango_logs', JSON.stringify(logs));
                         hasChanges = true;
                     }
@@ -601,13 +601,27 @@ async function fetchFromCloud() {
     return false;
 }
 
+function deduplicateLogs(logsArray) {
+    if (!Array.isArray(logsArray)) return [];
+    const seen = new Set();
+    const result = [];
+    for (const log of logsArray) {
+        const key = log.shiftId || (log.id ? `id_${log.id}` : `${log.date}_${log.startTime}_${log.endTime}_${log.tasks}`);
+        if (!seen.has(key)) {
+            seen.add(key);
+            result.push(log);
+        }
+    }
+    return result;
+}
+
 // Load from LocalStorage (and attempt file system auto-sync)
 async function loadData() {
     // Primary fallback: LocalStorage
     const savedLogs = localStorage.getItem('multimango_logs');
     if (savedLogs) {
         try {
-            logs = JSON.parse(savedLogs);
+            logs = deduplicateLogs(JSON.parse(savedLogs));
         } catch (e) {
             logs = [];
         }
@@ -890,6 +904,7 @@ function startShift() {
     setStepperTime('shift-end', autoEndVal);
 
     activeShift = {
+        shiftId: 'shift_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
         date: date,
         startTime: start,
         plannedEndTime: autoEndVal,
@@ -916,7 +931,6 @@ function resumeActiveShift() {
     }
     // If no planned end time, leave the end stepper at whatever it shows — user can set it
 
-
     btnStartShift.disabled = true;
     btnStartShift.style.opacity = '0.5';
     btnStartShift.style.cursor = 'not-allowed';
@@ -935,7 +949,8 @@ function resumeActiveShift() {
     }
     renderCounterHistory();
 
-    // Start Live Timer
+    // Start Live Timer (Clean old interval if running)
+    if (liveTimerInterval) clearInterval(liveTimerInterval);
     updateLiveTimer();
     liveTimerInterval = setInterval(updateLiveTimer, 1000);
 }
@@ -1024,6 +1039,23 @@ function updateUIForInactiveShift() {
 function endShift() {
     if (!activeShift) return;
 
+    const currentShiftId = activeShift.shiftId;
+    
+    // Check if this shift has already been saved to logs (e.g. ended on another device)
+    const alreadySaved = logs.some(l => 
+        (currentShiftId && l.shiftId === currentShiftId) ||
+        (l.date === activeShift.date && l.startTime === activeShift.startTime && l.tasks === activeShift.tasks)
+    );
+
+    if (alreadySaved) {
+        activeShift = null;
+        saveData();
+        updateUIForInactiveShift();
+        renderLogs();
+        showToast('Shift was already ended and synced from another device.', 'info');
+        return;
+    }
+
     const end = shiftEndInput.value;
 
     const duration = getDurationHours(activeShift.startTime, end);
@@ -1034,6 +1066,7 @@ function endShift() {
 
     const newLog = {
         id: Date.now().toString(),
+        shiftId: currentShiftId || ('shift_' + Date.now()),
         date: activeShift.date,
         startTime: activeShift.startTime,
         endTime: end,

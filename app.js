@@ -506,6 +506,7 @@ async function saveToCloud() {
     const url = `${FIREBASE_DB_URL}data.json?auth=${FIREBASE_AUTH_KEY}`;
     const payload = {
         logs: logs,
+        payments: paymentEvents,
         activeShift: activeShift,
         lastSaved: new Date().toISOString()
     };
@@ -569,6 +570,15 @@ async function fetchFromCloud() {
                         hasChanges = true;
                     }
                 }
+                if (data.payments && Array.isArray(data.payments) && data.payments.length > 0) {
+                    const combinedPayments = [...paymentEvents, ...data.payments];
+                    const cleanPayments = deduplicatePaymentEvents(combinedPayments);
+                    if (JSON.stringify(paymentEvents) !== JSON.stringify(cleanPayments)) {
+                        paymentEvents = cleanPayments;
+                        localStorage.setItem('multimango_payments', JSON.stringify(paymentEvents));
+                        hasChanges = true;
+                    }
+                }
                 // Cross-device activeShift sync
                 const cloudActive = data && data.activeShift ? data.activeShift : null;
                 let shouldForceNull = false;
@@ -629,6 +639,20 @@ function deduplicateLogs(logsArray) {
         if (!seen.has(key)) {
             seen.add(key);
             result.push(log);
+        }
+    }
+    return result;
+}
+
+function deduplicatePaymentEvents(paymentsArray) {
+    if (!Array.isArray(paymentsArray)) return [];
+    const seen = new Set();
+    const result = [];
+    for (const p of paymentsArray) {
+        const key = p.id || `${p.woKey}_${p.stage}_${p.date}`;
+        if (!seen.has(key)) {
+            seen.add(key);
+            result.push(p);
         }
     }
     return result;
@@ -1621,12 +1645,11 @@ function initPaymentCalendar() {
         try {
             const parsed = JSON.parse(savedPayments);
             if (Array.isArray(parsed) && parsed.length > 0) {
-                paymentEvents = parsed;
+                paymentEvents = deduplicatePaymentEvents([...DEFAULT_PAYMENT_EVENTS, ...parsed]);
             }
         } catch(e) {}
-    } else {
-        localStorage.setItem('multimango_payments', JSON.stringify(paymentEvents));
     }
+    localStorage.setItem('multimango_payments', JSON.stringify(paymentEvents));
 
     const tabShift = document.getElementById('tab-shift-tracker');
     const tabPay = document.getElementById('tab-payment-calendar');

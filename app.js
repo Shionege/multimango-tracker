@@ -234,22 +234,24 @@ document.addEventListener('DOMContentLoaded', () => {
 let usdToIdrRate = 16000; // Fallback rate
 
 async function fetchExchangeRate() {
+    const el = document.getElementById('rate-exchange-info');
+    if (el) el.textContent = `Rate: $1 = Rp 16.250`;
+
     try {
-        const res = await fetch('https://open.er-api.com/v6/latest/USD');
+        let res = await fetch('https://open.er-api.com/v6/latest/USD');
+        if (!res.ok) {
+            res = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
+        }
         const data = await res.json();
         if (data && data.rates && data.rates.IDR) {
             usdToIdrRate = data.rates.IDR;
             const formatted = new Intl.NumberFormat('id-ID').format(Math.round(usdToIdrRate));
-            const el = document.getElementById('rate-exchange-info');
             if (el) el.textContent = `Rate: $1 = Rp ${formatted}`;
-            
-            // Re-render logs and stats with the updated live rate
             renderLogs();
         }
     } catch (e) {
         console.warn('Failed to fetch live USD/IDR rate, using fallback', e);
-        const el = document.getElementById('rate-exchange-info');
-        if (el) el.textContent = `Rate: $1 = Rp 16.000 (fallback)`;
+        if (el) el.textContent = `Rate: $1 = Rp 16.250`;
     }
 }
 
@@ -719,44 +721,51 @@ function initEventListeners() {
     btnEndShift.addEventListener('click', endShift);
 
     // Task Counter buttons
-    btnPlusTask.addEventListener('click', incrementTask);
-    btnMinusTask.addEventListener('click', decrementTask);
+    if (btnPlusTask) btnPlusTask.addEventListener('click', incrementTask);
+    if (btnMinusTask) btnMinusTask.addEventListener('click', decrementTask);
 
     // Keyboard Shortcuts
     document.addEventListener('keydown', handleKeyboardShortcuts);
 
     // Filters
-    filterStartDate.addEventListener('change', () => {
-        const startVal = filterStartDate.value;
-        if (startVal) {
-            const startDate = new Date(startVal);
-            // 7 days inclusive: StartDate + 6 days
-            startDate.setDate(startDate.getDate() + 6);
-            
-            const year = startDate.getFullYear();
-            const month = String(startDate.getMonth() + 1).padStart(2, '0');
-            const day = String(startDate.getDate()).padStart(2, '0');
-            filterEndDate.value = `${year}-${month}-${day}`;
-        }
-        renderLogs();
-    });
-    filterEndDate.addEventListener('change', renderLogs);
-    btnResetFilters.addEventListener('click', resetFilters);
+    if (filterStartDate) {
+        filterStartDate.addEventListener('change', () => {
+            const startVal = filterStartDate.value;
+            if (startVal) {
+                const startDate = new Date(startVal);
+                // 7 days inclusive: StartDate + 6 days
+                startDate.setDate(startDate.getDate() + 6);
+                
+                const year = startDate.getFullYear();
+                const month = String(startDate.getMonth() + 1).padStart(2, '0');
+                const day = String(startDate.getDate()).padStart(2, '0');
+                if (filterEndDate) filterEndDate.value = `${year}-${month}-${day}`;
+            }
+            renderLogs();
+        });
+    }
+    if (filterEndDate) filterEndDate.addEventListener('change', renderLogs);
+    if (btnResetFilters) btnResetFilters.addEventListener('click', resetFilters);
     const btnClearFilters = document.getElementById('btn-clear-filters');
     if (btnClearFilters) {
         btnClearFilters.addEventListener('click', clearFilters);
     }
 
     // Export/Import
-    btnExportCsv.addEventListener('click', exportToCSV);
-    btnExportJson.addEventListener('click', exportToJSON);
-    btnImportJson.addEventListener('click', () => fileImportInput.click());
-    fileImportInput.addEventListener('change', importFromJSON);
+    const importFileInput = document.getElementById('import-file');
+    if (btnExportCsv) btnExportCsv.addEventListener('click', exportToCSV);
+    if (btnExportJson) btnExportJson.addEventListener('click', exportToJSON);
+    if (btnImportJson) btnImportJson.addEventListener('click', () => {
+        if (importFileInput) importFileInput.click();
+        else if (fileImportInput) fileImportInput.click();
+    });
+    if (importFileInput) importFileInput.addEventListener('change', importFromJSON);
+    if (fileImportInput) fileImportInput.addEventListener('change', importFromJSON);
 
     // Modal Events
-    btnCloseModal.addEventListener('click', closeModal);
-    btnCancelEdit.addEventListener('click', closeModal);
-    btnSaveEdit.addEventListener('click', saveEdit);
+    if (btnCloseModal) btnCloseModal.addEventListener('click', closeModal);
+    if (btnCancelEdit) btnCancelEdit.addEventListener('click', closeModal);
+    if (btnSaveEdit) btnSaveEdit.addEventListener('click', saveEdit);
 
     // Set Now / Today Helper Buttons
     const btnDateToday = document.getElementById('btn-date-today');

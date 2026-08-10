@@ -203,11 +203,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // 3. Load data from localStorage
     loadData();
 
-    // 4. Set default dates and initial start time
+    // 4. Set default shift date and initial start time (Filter shows ALL logs by default)
     const todayStr = getTodayDateString();
-    shiftDateInput.value = todayStr;
-    filterStartDate.value = todayStr;
-    filterEndDate.value = todayStr;
+    if (shiftDateInput) shiftDateInput.value = todayStr;
+    if (filterStartDate) filterStartDate.value = '';
+    if (filterEndDate) filterEndDate.value = '';
     setStepperTime('shift-start', getCurrentTimeString());
 
     // 5. Initialize event listeners
@@ -1360,15 +1360,15 @@ function calculateStats(filteredList) {
 
 function resetFilters() {
     const todayStr = getTodayDateString();
-    filterStartDate.value = todayStr;
-    filterEndDate.value = todayStr;
+    if (filterStartDate) filterStartDate.value = todayStr;
+    if (filterEndDate) filterEndDate.value = todayStr;
     renderLogs();
     showToast('Filters reset to Today', 'info');
 }
 
 function clearFilters() {
-    filterStartDate.value = '';
-    filterEndDate.value = '';
+    if (filterStartDate) filterStartDate.value = '';
+    if (filterEndDate) filterEndDate.value = '';
     renderLogs();
     showToast('Showing all historical logs', 'info');
 }

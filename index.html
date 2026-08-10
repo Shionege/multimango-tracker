@@ -251,7 +251,10 @@
                                 <button type="button" id="btn-sync-phone" class="dropdown-item-btn">
                                     📱 Sync Phone (QR)
                                 </button>
-                                <button type="button" id="btn-force-restore-cloud" class="dropdown-item-btn" style="color: var(--mango-primary); font-weight: 600;">
+                                <button type="button" id="btn-open-batch-modal" class="dropdown-item-btn" style="color: var(--mango-primary); font-weight: 600;">
+                                    ⚡ Batch Add / Recover Logs
+                                </button>
+                                <button type="button" id="btn-force-restore-cloud" class="dropdown-item-btn">
                                     🔄 Restore All Firebase Backup
                                 </button>
                             </div>
@@ -472,6 +475,29 @@
                 <button type="button" id="btn-copy-qr-link" class="btn btn-secondary" style="font-size: 0.78rem; padding: 0.4rem 0.8rem; width: 100%;">
                     📋 Copy Link for Phone Browser
                 </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- BATCH PASTE QUICK ADD MODAL -->
+    <div id="batch-modal" class="modal-overlay">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h3>⚡ Quick Batch Add / Recover Logs</h3>
+                <button class="close-modal" id="btn-close-batch-modal">&times;</button>
+            </div>
+            <div class="modal-body" style="display: flex; flex-direction: column; gap: 1rem;">
+                <p style="font-size: 0.82rem; color: var(--text-muted); line-height: 1.45; margin: 0;">
+                    Paste or type your shift logs line-by-line in format: <code>YYYY-MM-DD StartTime-EndTime Tasks</code><br>
+                    Example:<br>
+                    <code>2026-08-02 09:00-17:00 4</code><br>
+                    <code>2026-08-03 10:00-15:00 3</code>
+                </p>
+                <textarea id="batch-text-input" rows="6" style="background: rgba(255,255,255,0.03); border: 1px solid var(--card-border); color: white; padding: 0.75rem; border-radius: 10px; font-family: 'JetBrains Mono', monospace; font-size: 0.85rem;" placeholder="2026-08-02 09:00-17:00 4&#10;2026-08-03 10:00-15:00 3&#10;2026-08-04 14:00-18:00 2"></textarea>
+                <div class="modal-actions">
+                    <button type="button" id="btn-cancel-batch" class="btn btn-secondary">Cancel</button>
+                    <button type="button" id="btn-submit-batch" class="btn btn-primary">Add All Shifts to History</button>
+                </div>
             </div>
         </div>
     </div>

@@ -784,6 +784,75 @@ function initEventListeners() {
         });
     }
 
+    // Batch Add Modal Events
+    const btnOpenBatch = document.getElementById('btn-open-batch-modal');
+    const batchModal = document.getElementById('batch-modal');
+    const btnCloseBatch = document.getElementById('btn-close-batch-modal');
+    const btnCancelBatch = document.getElementById('btn-cancel-batch');
+    const btnSubmitBatch = document.getElementById('btn-submit-batch');
+    const batchTextInput = document.getElementById('batch-text-input');
+
+    if (btnOpenBatch && batchModal) {
+        btnOpenBatch.addEventListener('click', () => batchModal.classList.add('active'));
+    }
+    const closeBatchModal = () => batchModal && batchModal.classList.remove('active');
+    if (btnCloseBatch) btnCloseBatch.addEventListener('click', closeBatchModal);
+    if (btnCancelBatch) btnCancelBatch.addEventListener('click', closeBatchModal);
+
+    if (btnSubmitBatch && batchTextInput) {
+        btnSubmitBatch.addEventListener('click', () => {
+            const rawText = batchTextInput.value.trim();
+            if (!rawText) {
+                showToast('Please paste or type shift entries!', 'danger');
+                return;
+            }
+            const lines = rawText.split('\n');
+            let addedCount = 0;
+
+            lines.forEach(line => {
+                const parts = line.trim().split(/\s+/);
+                if (parts.length >= 3) {
+                    const dateStr = parts[0];
+                    const timeRange = parts[1];
+                    const tasksCount = parseInt(parts[2]) || 0;
+                    
+                    const timeParts = timeRange.split('-');
+                    if (timeParts.length === 2) {
+                        const startTime = timeParts[0];
+                        const endTime = timeParts[1];
+                        const duration = getDurationHours(startTime, endTime);
+
+                        if (dateStr && duration > 0) {
+                            const rate = Number((tasksCount / duration).toFixed(2));
+                            logs.push({
+                                id: Date.now().toString() + '_' + Math.random().toString(36).substr(2, 4),
+                                shiftId: 'batch_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+                                date: dateStr,
+                                startTime: startTime,
+                                endTime: endTime,
+                                duration: duration,
+                                tasks: tasksCount,
+                                rate: rate
+                            });
+                            addedCount++;
+                        }
+                    }
+                }
+            });
+
+            if (addedCount > 0) {
+                logs.sort((a, b) => b.id.localeCompare(a.id));
+                saveData();
+                renderLogs();
+                batchTextInput.value = '';
+                closeBatchModal();
+                showToast(`Successfully added ${addedCount} shift entries to history!`, 'success');
+            } else {
+                showToast('Could not parse shift lines. Check format: YYYY-MM-DD Start-End Tasks', 'danger');
+            }
+        });
+    }
+
     // Modal Events
     if (btnCloseModal) btnCloseModal.addEventListener('click', closeModal);
     if (btnCancelEdit) btnCancelEdit.addEventListener('click', closeModal);

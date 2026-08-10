@@ -457,7 +457,7 @@ async function loadFromFileSystem() {
 
 // Firebase Config
 let FIREBASE_DB_URL = 'https://multimango-tracker-default-rtdb.asia-southeast1.firebasedatabase.app/';
-let FIREBASE_AUTH_KEY = 'MultimangoRahasia123';
+let FIREBASE_AUTH_KEY = 'MultimangoSecureKey_992182';
 
 // Dynamic Database Overriding (for Phone Sync Access via QR)
 const urlParams = new URLSearchParams(window.location.search);
@@ -481,6 +481,7 @@ if (savedOverriddenUrl && savedOverriddenAuth) {
 // Save to LocalStorage & File System & Cloud Sync
 function saveData() {
     localStorage.setItem('multimango_logs', JSON.stringify(logs));
+    localStorage.setItem('multimango_payments', JSON.stringify(paymentEvents));
     if (activeShift) {
         localStorage.setItem('multimango_active_shift', JSON.stringify(activeShift));
     } else {
@@ -501,10 +502,11 @@ async function saveToCloud() {
         statusEl.style.color = 'var(--mango-primary)';
     }
 
-    const url = `${FIREBASE_DB_URL}data.json`;
+    const url = `${FIREBASE_DB_URL}data.json?auth=${FIREBASE_AUTH_KEY}`;
     const payload = {
         logs: logs,
         activeShift: activeShift,
+        payments: paymentEvents,
         lastSaved: new Date().toISOString()
     };
 
@@ -538,7 +540,7 @@ async function fetchFromCloud() {
         statusEl.style.color = 'var(--mango-primary)';
     }
 
-    const url = `${FIREBASE_DB_URL}data.json`;
+    const url = `${FIREBASE_DB_URL}data.json?auth=${FIREBASE_AUTH_KEY}`;
     try {
         const res = await fetch(url);
         if (res.ok) {
@@ -546,7 +548,7 @@ async function fetchFromCloud() {
             
             if (data === null) {
                 // Cloud DB is valid but empty; if we have local logs, upload them to initialize cloud
-                if (logs.length > 0 || activeShift) {
+                if (logs.length > 0 || activeShift || paymentEvents.length > 0) {
                     await saveToCloud();
                 } else if (statusEl) {
                     statusEl.innerHTML = '● Cloud: Synced';
@@ -565,6 +567,13 @@ async function fetchFromCloud() {
                         hasChanges = true;
                     }
                 }
+                if (data.payments && Array.isArray(data.payments)) {
+                    if (JSON.stringify(paymentEvents) !== JSON.stringify(data.payments)) {
+                        paymentEvents = data.payments;
+                        localStorage.setItem('multimango_payments', JSON.stringify(paymentEvents));
+                        hasChanges = true;
+                    }
+                }
                 if (data.hasOwnProperty('activeShift')) {
                     if (JSON.stringify(activeShift) !== JSON.stringify(data.activeShift)) {
                         activeShift = data.activeShift;
@@ -579,6 +588,7 @@ async function fetchFromCloud() {
                 
                 if (hasChanges) {
                     renderLogs();
+                    if (typeof renderPaymentCalendar === 'function') renderPaymentCalendar();
                     if (activeShift) resumeActiveShift();
                     else updateUIForInactiveShift();
                 }
@@ -1502,3 +1512,558 @@ function importFromJSON(e) {
     };
     reader.readAsText(file);
 }
+
+// ==========================================================================
+// PAYMENT CALENDAR & GMAIL AUTO-SYNC ENGINE
+// ==========================================================================
+
+let paymentEvents = [];
+let currentCalDate = new Date();
+const GOOGLE_CLIENT_ID = '848704186375-qcg8qv6rugiaud1fqan4raoi8nb5s2uf.apps.googleusercontent.com';
+let tokenClient = null;
+
+// Initialize saved payment events on startup
+(function initPaymentsState() {
+    const savedPayments = localStorage.getItem('multimango_payments');
+    if (savedPayments) {
+        try {
+            paymentEvents = JSON.parse(savedPayments);
+        } catch(e) {
+            paymentEvents = [];
+        }
+    }
+})();
+
+// Navigation View Mode Tabs
+document.addEventListener('DOMContentLoaded', () => {
+    const tabShiftTracker = document.getElementById('tab-shift-tracker');
+    const tabPaymentCalendar = document.getElementById('tab-payment-calendar');
+    const viewShiftTracker = document.getElementById('view-shift-tracker');
+    const viewPaymentCalendar = document.getElementById('view-payment-calendar');
+
+    if (tabShiftTracker && tabPaymentCalendar) {
+        tabShiftTracker.addEventListener('click', () => {
+            tabShiftTracker.classList.add('active');
+            tabPaymentCalendar.classList.remove('active');
+            viewShiftTracker.classList.add('active');
+            viewPaymentCalendar.classList.remove('active');
+        });
+
+        tabPaymentCalendar.addEventListener('click', () => {
+            tabPaymentCalendar.classList.add('active');
+            tabShiftTracker.classList.remove('active');
+            viewPaymentCalendar.classList.add('active');
+            viewShiftTracker.classList.remove('active');
+            renderPaymentCalendar();
+        });
+    }
+
+    // Month Navigation Controls
+    const btnCalPrev = document.getElementById('btn-cal-prev-month');
+    const btnCalNext = document.getElementById('btn-cal-next-month');
+    if (btnCalPrev && btnCalNext) {
+        btnCalPrev.addEventListener('click', () => {
+            currentCalDate.setMonth(currentCalDate.getMonth() - 1);
+            renderPaymentCalendar();
+        });
+        btnCalNext.addEventListener('click', () => {
+            currentCalDate.setMonth(currentCalDate.getMonth() + 1);
+            renderPaymentCalendar();
+        });
+    }
+
+    // Gmail Connect Button
+    const btnConnectGmail = document.getElementById('btn-connect-gmail');
+    if (btnConnectGmail) {
+        btnConnectGmail.addEventListener('click', handleGmailConnect);
+    }
+
+    // Close Payment Modal
+    const btnClosePayModal = document.getElementById('btn-close-pay-modal');
+    const payModal = document.getElementById('payment-modal');
+    if (btnClosePayModal && payModal) {
+        btnClosePayModal.addEventListener('click', () => {
+            payModal.classList.remove('active');
+        });
+    }
+
+    // Initial render of calendar
+    renderPaymentCalendar();
+});
+
+// Google Identity Services (GIS) Auth Initializer
+function handleGmailConnect() {
+    if (typeof google === 'undefined' || !google.accounts || !google.accounts.oauth2) {
+        showToast('Google API Client Library loading... Please try again in a moment.', 'danger');
+        return;
+    }
+
+    if (!tokenClient) {
+        tokenClient = google.accounts.oauth2.initTokenClient({
+            client_id: GOOGLE_CLIENT_ID,
+            scope: 'https://www.googleapis.com/auth/gmail.readonly',
+            callback: async (response) => {
+                if (response.error) {
+                    showToast('Gmail authentication error: ' + response.error, 'danger');
+                    return;
+                }
+                if (response.access_token) {
+                    sessionStorage.setItem('gmail_token', response.access_token);
+                    updateGmailStatusUI(true);
+                    showToast('Gmail connected! Fetching Work Orders & Payments...', 'success');
+                    await fetchGmailPayments(response.access_token);
+                }
+            }
+        });
+    }
+
+    tokenClient.requestAccessToken();
+}
+
+function updateGmailStatusUI(isConnected) {
+    const statusBadge = document.getElementById('gmail-sync-status');
+    const btnText = document.getElementById('gmail-btn-text');
+    if (statusBadge) {
+        if (isConnected) {
+            statusBadge.textContent = '● Gmail: Connected';
+            statusBadge.classList.add('connected');
+        } else {
+            statusBadge.textContent = '● Gmail: Not Connected';
+            statusBadge.classList.remove('connected');
+        }
+    }
+    if (btnText) {
+        btnText.textContent = isConnected ? 'Sync Gmail Now' : 'Connect Gmail Auto-Sync';
+    }
+}
+
+// Fetch & Parse Gmail Payments
+async function fetchGmailPayments(accessToken) {
+    const query = 'from:(no-reply@rws.com OR rws-payments@rws.com) OR subject:("Work Order Created" OR "Payment submitted" OR "Tipalti payment processed")';
+    const listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(query)}&maxResults=50`;
+
+    try {
+        const res = await fetch(listUrl, {
+            headers: { 'Authorization': `Bearer ${accessToken}` }
+        });
+        if (!res.ok) throw new Error('Gmail API HTTP error ' + res.status);
+        const data = await res.json();
+        
+        if (!data.messages || data.messages.length === 0) {
+            showToast('No RWS/Tipalti payment emails found in your Inbox.', 'info');
+            return;
+        }
+
+        let newEventsFound = 0;
+
+        for (const msg of data.messages) {
+            const msgUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=full`;
+            const msgRes = await fetch(msgUrl, {
+                headers: { 'Authorization': `Bearer ${accessToken}` }
+            });
+            if (msgRes.ok) {
+                const msgData = await msgRes.json();
+                const processed = await parseSingleGmailMessage(msgData, accessToken);
+                if (processed) newEventsFound++;
+            }
+        }
+
+        saveData();
+        renderPaymentCalendar();
+        showToast(`Gmail Sync Complete! ${newEventsFound} payment milestones updated.`, 'success');
+    } catch (e) {
+        console.warn('Error fetching Gmail messages:', e);
+        showToast('Could not fetch Gmail emails: ' + e.message, 'danger');
+    }
+}
+
+// Single Email Message Parser
+async function parseSingleGmailMessage(msgData, accessToken) {
+    const headers = msgData.payload.headers || [];
+    const subject = (headers.find(h => h.name.toLowerCase() === 'subject') || {}).value || '';
+    const internalDate = Number(msgData.internalDate || Date.now());
+    const emailDateStr = new Date(internalDate).toISOString().split('T')[0];
+
+    let bodyText = extractEmailBodyText(msgData.payload);
+    let attachmentHtml = '';
+
+    // Check for HTML Attachment (e.g. Work Order Document)
+    const parts = msgData.payload.parts || [];
+    for (const part of parts) {
+        if (part.filename && (part.filename.endsWith('.html') || part.filename.endsWith('.htm')) && part.body && part.body.attachmentId) {
+            try {
+                const attachUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msgData.id}/attachments/${part.body.attachmentId}`;
+                const attachRes = await fetch(attachUrl, { headers: { 'Authorization': `Bearer ${accessToken}` } });
+                if (attachRes.ok) {
+                    const attachData = await attachRes.json();
+                    if (attachData.data) {
+                        attachmentHtml = atob(attachData.data.replace(/-/g, '+').replace(/_/g, '/'));
+                    }
+                }
+            } catch(e){}
+        }
+    }
+
+    let modified = false;
+
+    // EVENT TYPE 1: WORK ORDER CREATED
+    if (subject.toLowerCase().includes('work order created')) {
+        let docNo = '';
+        let amountUsd = 0;
+        let workPeriodStart = '';
+        let workPeriodEnd = '';
+        let projectName = '';
+
+        // Match Doc No in Body/Subject (e.g., Z3426188112)
+        const docMatch = (bodyText + attachmentHtml).match(/Z\d{9,12}/i);
+        if (docMatch) docNo = docMatch[0];
+
+        // Match Work Period Range (e.g., 07/18/2026_to_07/24/2026)
+        const periodMatch = (bodyText + attachmentHtml).match(/(\d{2}\/\d{2}\/\d{4})_to_(\d{2}\/\d{2}\/\d{4})/);
+        if (periodMatch) {
+            workPeriodStart = convertUsDateToIso(periodMatch[1]);
+            workPeriodEnd = convertUsDateToIso(periodMatch[2]);
+        }
+
+        // Match Total Amount USD
+        const amountMatch = (bodyText + attachmentHtml).match(/Total Amount:[\s\S]*?(\d+\.\d{2})|Total USD[\s\S]*?(\d+\.\d{2})/i);
+        if (amountMatch) {
+            amountUsd = Number(amountMatch[1] || amountMatch[2]);
+        }
+
+        // Match Project Name
+        const projMatch = (bodyText + attachmentHtml).match(/META_[A-Z0-9_]+/i);
+        if (projMatch) projectName = projMatch[0];
+
+        if (docNo || amountUsd > 0) {
+            const woKey = docNo || `WO_${emailDateStr}_${amountUsd}`;
+            let existing = paymentEvents.find(p => p.woKey === woKey);
+            if (!existing) {
+                existing = {
+                    id: 'pay_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+                    woKey: woKey,
+                    docNo: docNo || woKey,
+                    amountUsd: amountUsd,
+                    amountIdr: 0,
+                    workPeriodStart: workPeriodStart,
+                    workPeriodEnd: workPeriodEnd,
+                    projectName: projectName,
+                    stage1Date: emailDateStr,
+                    stage2Date: null,
+                    stage3Date: null,
+                    status: 'WO_CREATED'
+                };
+                paymentEvents.push(existing);
+                modified = true;
+            } else {
+                if (workPeriodStart) existing.workPeriodStart = workPeriodStart;
+                if (workPeriodEnd) existing.workPeriodEnd = workPeriodEnd;
+                if (amountUsd > 0) existing.amountUsd = amountUsd;
+                modified = true;
+            }
+        }
+    }
+
+    // EVENT TYPE 2: RWS PAYMENT SUBMITTED
+    else if (subject.toLowerCase().includes('payment submitted')) {
+        let amountUsd = 0;
+        let subDate = emailDateStr;
+
+        const amtMatch = bodyText.match(/Amount:\s*(\d+\.\d{2})/i);
+        if (amtMatch) amountUsd = Number(amtMatch[1]);
+
+        const dateMatch = bodyText.match(/(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2},\s+\d{4}/i);
+        if (dateMatch) {
+            try { subDate = new Date(dateMatch[0]).toISOString().split('T')[0]; } catch(e){}
+        }
+
+        if (amountUsd > 0) {
+            // Find existing event by amount or update latest pending
+            let target = paymentEvents.find(p => p.amountUsd === amountUsd && !p.stage2Date);
+            if (!target) target = paymentEvents.find(p => !p.stage2Date);
+
+            if (target) {
+                target.stage2Date = subDate;
+                if (target.status === 'WO_CREATED') target.status = 'PROCESSING';
+                modified = true;
+            } else {
+                paymentEvents.push({
+                    id: 'pay_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+                    woKey: `SUB_${subDate}_${amountUsd}`,
+                    docNo: `SUB_${amountUsd}`,
+                    amountUsd: amountUsd,
+                    amountIdr: 0,
+                    workPeriodStart: '',
+                    workPeriodEnd: '',
+                    projectName: '',
+                    stage1Date: subDate,
+                    stage2Date: subDate,
+                    stage3Date: null,
+                    status: 'PROCESSING'
+                });
+                modified = true;
+            }
+        }
+    }
+
+    // EVENT TYPE 3: TIPALTI PAYMENT PROCESSED SUCCESSFULLY
+    else if (subject.toLowerCase().includes('payment processed successfully')) {
+        let amountUsd = 0;
+        let amountIdr = 0;
+        let docRef = '';
+
+        const usdMatch = bodyText.match(/USD\s+(\d+\.\d{2})/i);
+        if (usdMatch) amountUsd = Number(usdMatch[1]);
+
+        const idrMatch = bodyText.match(/IDR\s+([\d,]+(?:\.\d{2})?)/i);
+        if (idrMatch) {
+            amountIdr = Number(idrMatch[1].replace(/,/g, ''));
+        }
+
+        const refMatch = bodyText.match(/PTIP[A-Z0-9]+/i);
+        if (refMatch) docRef = refMatch[0];
+
+        if (amountUsd > 0 || amountIdr > 0) {
+            let target = paymentEvents.find(p => p.amountUsd === amountUsd && !p.stage3Date);
+            if (!target) target = paymentEvents.find(p => !p.stage3Date);
+
+            if (target) {
+                target.stage3Date = emailDateStr;
+                if (amountIdr > 0) target.amountIdr = amountIdr;
+                if (docRef) target.docRef = docRef;
+                target.status = 'CLEARED';
+                modified = true;
+            } else {
+                paymentEvents.push({
+                    id: 'pay_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+                    woKey: docRef || `PAID_${emailDateStr}_${amountUsd}`,
+                    docNo: docRef || `PAID_${amountUsd}`,
+                    amountUsd: amountUsd,
+                    amountIdr: amountIdr,
+                    workPeriodStart: '',
+                    workPeriodEnd: '',
+                    projectName: '',
+                    stage1Date: emailDateStr,
+                    stage2Date: emailDateStr,
+                    stage3Date: emailDateStr,
+                    status: 'CLEARED'
+                });
+                modified = true;
+            }
+        }
+    }
+
+    return modified;
+}
+
+// Helper: Extract Email Body Text
+function extractEmailBodyText(payload) {
+    if (!payload) return '';
+    if (payload.body && payload.body.data) {
+        return atob(payload.body.data.replace(/-/g, '+').replace(/_/g, '/'));
+    }
+    if (payload.parts && payload.parts.length > 0) {
+        let text = '';
+        for (const part of payload.parts) {
+            text += extractEmailBodyText(part);
+        }
+        return text;
+    }
+    return '';
+}
+
+// Helper: Convert MM/DD/YYYY to YYYY-MM-DD
+function convertUsDateToIso(usDateStr) {
+    const parts = usDateStr.split('/');
+    if (parts.length === 3) {
+        return `${parts[2]}-${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}`;
+    }
+    return usDateStr;
+}
+
+// Render Payment Calendar Grid & Summary Widgets
+function renderPaymentCalendar() {
+    const monthTitle = document.getElementById('cal-month-year-title');
+    const grid = document.getElementById('calendar-grid');
+    if (!grid) return;
+
+    grid.innerHTML = '';
+
+    const year = currentCalDate.getFullYear();
+    const month = currentCalDate.getMonth();
+
+    const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    if (monthTitle) monthTitle.textContent = `${monthNames[month]} ${year}`;
+
+    // Get First Day of Month (0 = Sun, 1 = Mon, ..., 6 = Sat)
+    const firstDay = new Date(year, month, 1);
+    let startDayOfWeek = firstDay.getDay(); // 0 is Sun
+    if (startDayOfWeek === 0) startDayOfWeek = 7; // Convert to Mon=1, ..., Sun=7
+
+    const lastDayOfMonth = new Date(year, month + 1, 0).getDate();
+    const prevMonthLastDay = new Date(year, month, 0).getDate();
+
+    const todayStr = getTodayDateString();
+
+    // Render Previous Month Padding Cells
+    for (let i = startDayOfWeek - 1; i > 0; i--) {
+        const pDay = prevMonthLastDay - i + 1;
+        const cell = document.createElement('div');
+        cell.className = 'calendar-cell other-month';
+        cell.innerHTML = `<div class="cal-date-num">${pDay}</div>`;
+        grid.appendChild(cell);
+    }
+
+    // Map Events by Date
+    const eventsByDate = {};
+    paymentEvents.forEach(evt => {
+        if (evt.stage1Date) addEventToMap(eventsByDate, evt.stage1Date, evt, 1);
+        if (evt.stage2Date) addEventToMap(eventsByDate, evt.stage2Date, evt, 2);
+        if (evt.stage3Date) addEventToMap(eventsByDate, evt.stage3Date, evt, 3);
+    });
+
+    // Render Current Month Cells
+    for (let day = 1; day <= lastDayOfMonth; day++) {
+        const dayStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const cell = document.createElement('div');
+        cell.className = 'calendar-cell';
+        if (dayStr === todayStr) cell.classList.add('today');
+
+        let cellContent = `<div class="cal-date-num">${day}</div>`;
+
+        if (eventsByDate[dayStr]) {
+            eventsByDate[dayStr].forEach(item => {
+                const stageClass = item.stage === 1 ? 'stage-1' : (item.stage === 2 ? 'stage-2' : 'stage-3');
+                const stageLabel = item.stage === 1 ? 'WO Created' : (item.stage === 2 ? 'Tipalti Proc' : 'Cleared');
+                const amountText = item.evt.amountUsd > 0 ? `$${item.evt.amountUsd.toFixed(2)}` : '';
+
+                cellContent += `
+                    <div class="cal-event-badge ${stageClass}" onclick="openPaymentEventDetail('${item.evt.id}')">
+                        <span class="cal-event-title">${item.evt.docNo || 'WO'} (${stageLabel})</span>
+                        <span class="cal-event-amount">${amountText}</span>
+                    </div>
+                `;
+            });
+        }
+
+        cell.innerHTML = cellContent;
+        grid.appendChild(cell);
+    }
+
+    // Render Next Month Padding Cells
+    const totalCells = grid.children.length;
+    const remainingCells = (7 - (totalCells % 7)) % 7;
+    for (let i = 1; i <= remainingCells; i++) {
+        const cell = document.createElement('div');
+        cell.className = 'calendar-cell other-month';
+        cell.innerHTML = `<div class="cal-date-num">${i}</div>`;
+        grid.appendChild(cell);
+    }
+
+    // Render Summary Widgets
+    updatePaymentSummaryWidgets();
+}
+
+function addEventToMap(map, dateStr, evt, stage) {
+    if (!map[dateStr]) map[dateStr] = [];
+    // Avoid duplicate stage entries on same date
+    if (!map[dateStr].some(e => e.evt.id === evt.id && e.stage === stage)) {
+        map[dateStr].push({ evt: evt, stage: stage });
+    }
+}
+
+// Update Summary Widgets
+function updatePaymentSummaryWidgets() {
+    let woCreatedSum = 0;
+    let woCount = 0;
+    let procSum = 0;
+    let procCount = 0;
+    let clearedUsdSum = 0;
+    let clearedIdrSum = 0;
+    let totalWaitDays = 0;
+    let clearedCount = 0;
+
+    paymentEvents.forEach(evt => {
+        if (evt.status === 'WO_CREATED') {
+            woCreatedSum += evt.amountUsd || 0;
+            woCount++;
+        } else if (evt.status === 'PROCESSING') {
+            procSum += evt.amountUsd || 0;
+            procCount++;
+        } else if (evt.status === 'CLEARED') {
+            clearedUsdSum += evt.amountUsd || 0;
+            clearedIdrSum += evt.amountIdr || 0;
+            clearedCount++;
+
+            // Calculate Turnaround Days (Work End / Stage1 -> Stage3)
+            const startDate = new Date(evt.workPeriodEnd || evt.stage1Date);
+            const endDate = new Date(evt.stage3Date);
+            const diffDays = Math.max(0, Math.round((endDate - startDate) / (1000 * 60 * 60 * 24)));
+            totalWaitDays += diffDays;
+        }
+    });
+
+    const avgWait = clearedCount > 0 ? Math.round(totalWaitDays / clearedCount) : 0;
+
+    const elWoVal = document.getElementById('pay-sum-wo-created');
+    const elWoCount = document.getElementById('pay-sum-wo-count');
+    const elProcVal = document.getElementById('pay-sum-tipalti-proc');
+    const elProcCount = document.getElementById('pay-sum-proc-count');
+    const elClearedUsd = document.getElementById('pay-sum-cleared-usd');
+    const elClearedIdr = document.getElementById('pay-sum-cleared-idr');
+    const elAvgWait = document.getElementById('pay-sum-avg-wait');
+
+    if (elWoVal) elWoVal.textContent = `$${woCreatedSum.toFixed(2)}`;
+    if (elWoCount) elWoCount.textContent = `${woCount} Work Orders`;
+    if (elProcVal) elProcVal.textContent = `$${procSum.toFixed(2)}`;
+    if (elProcCount) elProcCount.textContent = `${procCount} Payments`;
+    if (elClearedUsd) elClearedUsd.textContent = `$${clearedUsdSum.toFixed(2)}`;
+    if (elClearedIdr) elClearedIdr.textContent = `Rp ${new Intl.NumberFormat('id-ID').format(clearedIdrSum)}`;
+    if (elAvgWait) elAvgWait.textContent = `${avgWait} Days`;
+}
+
+// Open Payment Event Detail Modal
+function openPaymentEventDetail(eventId) {
+    const evt = paymentEvents.find(p => p.id === eventId);
+    if (!evt) return;
+
+    const modal = document.getElementById('payment-modal');
+    const body = document.getElementById('pay-modal-body');
+    if (!modal || !body) return;
+
+    let periodHtml = 'N/A';
+    if (evt.workPeriodStart && evt.workPeriodEnd) {
+        periodHtml = `<strong style="color: var(--mango-primary);">${evt.workPeriodStart} to ${evt.workPeriodEnd}</strong>`;
+    }
+
+    let idrText = evt.amountIdr > 0 ? ` (Rp ${new Intl.NumberFormat('id-ID').format(evt.amountIdr)})` : '';
+
+    body.innerHTML = `
+        <div style="background: rgba(0,0,0,0.2); border: 1px solid var(--card-border); padding: 0.85rem; border-radius: 12px;">
+            <div style="font-size: 0.75rem; color: var(--text-muted);">Document / WO No:</div>
+            <div style="font-size: 1.1rem; font-weight: 700; color: #fff;">${evt.docNo || evt.woKey}</div>
+            ${evt.projectName ? `<div style="font-size: 0.78rem; color: var(--mango-hover); margin-top: 0.2rem;">Project: ${evt.projectName}</div>` : ''}
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+            <div style="background: rgba(0,0,0,0.2); border: 1px solid var(--card-border); padding: 0.75rem; border-radius: 10px;">
+                <div style="font-size: 0.72rem; color: var(--text-muted);">Amount USD</div>
+                <div style="font-size: 1.1rem; font-weight: 700; color: var(--success);">$${evt.amountUsd.toFixed(2)}</div>
+            </div>
+            <div style="background: rgba(0,0,0,0.2); border: 1px solid var(--card-border); padding: 0.75rem; border-radius: 10px;">
+                <div style="font-size: 0.72rem; color: var(--text-muted);">Status</div>
+                <div style="font-size: 0.95rem; font-weight: 700; color: var(--accent-teal);">${evt.status}</div>
+            </div>
+        </div>
+
+        <div style="background: rgba(255,255,255,0.03); border: 1px dashed var(--card-border); padding: 0.75rem; border-radius: 10px; font-size: 0.8rem; display: flex; flex-direction: column; gap: 0.35rem;">
+            <div>🗓️ <strong>Work Period:</strong> ${periodHtml}</div>
+            <div>🔵 <strong>WO Created:</strong> ${evt.stage1Date || 'Pending'}</div>
+            <div>🟡 <strong>Tipalti Submitted:</strong> ${evt.stage2Date || 'Pending'}</div>
+            <div>🟢 <strong>Payment Cleared:</strong> ${evt.stage3Date || 'Pending'}${idrText}</div>
+        </div>
+    `;
+
+    modal.classList.add('active');
+}
+

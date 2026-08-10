@@ -741,15 +741,15 @@ function initEventListeners() {
     }
 
     // Export/Import
-    btnExportCsv.addEventListener('click', exportToCSV);
-    btnExportJson.addEventListener('click', exportToJSON);
-    btnImportJson.addEventListener('click', () => fileImportInput.click());
-    fileImportInput.addEventListener('change', importFromJSON);
+    if (btnExportCsv) btnExportCsv.addEventListener('click', exportToCSV);
+    if (btnExportJson) btnExportJson.addEventListener('click', exportToJSON);
+    if (btnImportJson) btnImportJson.addEventListener('click', () => fileImportInput && fileImportInput.click());
+    if (fileImportInput) fileImportInput.addEventListener('change', importFromJSON);
 
     // Modal Events
-    btnCloseModal.addEventListener('click', closeModal);
-    btnCancelEdit.addEventListener('click', closeModal);
-    btnSaveEdit.addEventListener('click', saveEdit);
+    if (btnCloseModal) btnCloseModal.addEventListener('click', closeModal);
+    if (btnCancelEdit) btnCancelEdit.addEventListener('click', closeModal);
+    if (btnSaveEdit) btnSaveEdit.addEventListener('click', saveEdit);
 
     // Set Now / Today Helper Buttons
     const btnDateToday = document.getElementById('btn-date-today');
@@ -1587,12 +1587,22 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Auto-restore saved Gmail token on load
+    const savedGmailToken = localStorage.getItem('gmail_token');
+    if (savedGmailToken) {
+        updateGmailStatusUI(true);
+        fetchGmailPayments(savedGmailToken);
+    }
+
     // Initial render of calendar
     renderPaymentCalendar();
 });
 
 // Google Identity Services (GIS) Auth Initializer
 function handleGmailConnect() {
+    // If we already have a saved token, try syncing first
+    const savedToken = localStorage.getItem('gmail_token');
+
     if (typeof google === 'undefined' || !google.accounts || !google.accounts.oauth2) {
         showToast('Google API Client Library loading... Please try again in a moment.', 'danger');
         return;
@@ -1608,9 +1618,9 @@ function handleGmailConnect() {
                     return;
                 }
                 if (response.access_token) {
-                    sessionStorage.setItem('gmail_token', response.access_token);
+                    localStorage.setItem('gmail_token', response.access_token);
                     updateGmailStatusUI(true);
-                    showToast('Gmail connected! Fetching Work Orders & Payments...', 'success');
+                    showToast('Gmail connected! Scanning Work Orders & Payments...', 'success');
                     await fetchGmailPayments(response.access_token);
                 }
             }
@@ -1639,13 +1649,20 @@ function updateGmailStatusUI(isConnected) {
 
 // Fetch & Parse Gmail Payments
 async function fetchGmailPayments(accessToken) {
-    const query = 'from:(no-reply@rws.com OR rws-payments@rws.com) OR subject:("Work Order Created" OR "Payment submitted" OR "Tipalti payment processed")';
-    const listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(query)}&maxResults=50`;
+    if (!accessToken) return;
+    const query = 'no-reply@rws.com OR rws-payments@rws.com OR "Work Order Created" OR "Payment submitted" OR "Tipalti payment processed"';
+    const listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(query)}&maxResults=100`;
 
     try {
         const res = await fetch(listUrl, {
             headers: { 'Authorization': `Bearer ${accessToken}` }
         });
+        if (res.status === 401 || res.status === 403) {
+            localStorage.removeItem('gmail_token');
+            updateGmailStatusUI(false);
+            showToast('Gmail session expired. Please click "Connect Gmail" to re-authenticate.', 'info');
+            return;
+        }
         if (!res.ok) throw new Error('Gmail API HTTP error ' + res.status);
         const data = await res.json();
         

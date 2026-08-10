@@ -177,7 +177,7 @@ const btnExportJson = document.getElementById('btn-export-json');
 const btnImportJson = document.getElementById('btn-import-json');
 const fileImportInput = document.getElementById('file-import-input');
 
-const logsTbody = document.getElementById('logs-tbody');
+const logsTbody = document.getElementById('logs-tbody') || document.getElementById('history-table-body');
 const emptyState = document.getElementById('empty-state');
 
 // Edit Modal Elements
@@ -1199,8 +1199,11 @@ function toggleDailyDetail(dateStr) {
 }
 
 function renderLogs() {
-    const startFilter = filterStartDate.value;
-    const endFilter = filterEndDate.value;
+    const targetTbody = document.getElementById('logs-tbody') || document.getElementById('history-table-body');
+    if (!targetTbody) return;
+
+    const startFilter = filterStartDate ? filterStartDate.value : '';
+    const endFilter = filterEndDate ? filterEndDate.value : '';
 
     let filtered = logs;
 
@@ -1211,12 +1214,13 @@ function renderLogs() {
         filtered = filtered.filter(log => log.date <= endFilter);
     }
 
-    logsTbody.innerHTML = '';
+    targetTbody.innerHTML = '';
 
+    const emptyEl = document.getElementById('empty-state');
     if (filtered.length === 0) {
-        emptyState.style.display = 'flex';
+        if (emptyEl) emptyEl.style.display = 'flex';
     } else {
-        emptyState.style.display = 'none';
+        if (emptyEl) emptyEl.style.display = 'none';
 
         // Group filtered logs by Date (YYYY-MM-DD)
         const groups = {};
@@ -1274,7 +1278,7 @@ function renderLogs() {
                 </td>
                 <td class="col-action"></td>
             `;
-            logsTbody.appendChild(mainTr);
+            targetTbody.appendChild(mainTr);
 
             // 2. Expandable Shift Detail Sub-Rows (8 Columns)
             if (isExpanded) {
@@ -1307,7 +1311,7 @@ function renderLogs() {
                             </div>
                         </td>
                     `;
-                    logsTbody.appendChild(subTr);
+                    targetTbody.appendChild(subTr);
                 });
             }
         });

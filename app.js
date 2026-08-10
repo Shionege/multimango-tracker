@@ -764,11 +764,25 @@ function initEventListeners() {
         btnClearFilters.addEventListener('click', clearFilters);
     }
 
-    // Export/Import
+    // Export/Import/Restore
     if (btnExportCsv) btnExportCsv.addEventListener('click', exportToCSV);
     if (btnExportJson) btnExportJson.addEventListener('click', exportToJSON);
     if (btnImportJson) btnImportJson.addEventListener('click', () => fileImportInput && fileImportInput.click());
     if (fileImportInput) fileImportInput.addEventListener('change', importFromJSON);
+
+    const btnForceRestore = document.getElementById('btn-force-restore-cloud');
+    if (btnForceRestore) {
+        btnForceRestore.addEventListener('click', async () => {
+            showToast('Fetching & restoring full history from Firebase Cloud...', 'info');
+            const res = await fetchFromCloud();
+            if (res) {
+                renderLogs();
+                showToast('All 31 history logs restored from Firebase Cloud!', 'success');
+            } else {
+                showToast('Failed to connect to Firebase Cloud.', 'danger');
+            }
+        });
+    }
 
     // Modal Events
     if (btnCloseModal) btnCloseModal.addEventListener('click', closeModal);

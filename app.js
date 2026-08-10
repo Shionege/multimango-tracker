@@ -1521,7 +1521,87 @@ function importFromJSON(e) {
 }
 
 // --- PAYMENT CALENDAR & GMAIL AUTO-SYNC MODULE ---
-let paymentEvents = [];
+const DEFAULT_PAYMENT_EVENTS = [
+    // Work Order 1 ($91.25 - Z3426188112)
+    {
+        id: 'wo_Z3426188112',
+        woKey: 'Z3426188112',
+        date: '2026-07-27',
+        stage: 'wo_created',
+        title: 'Work Order Created (Z3426188112)',
+        amount: 91.25,
+        statusText: '🔵 Work Order Created (Z3426188112)',
+        details: 'Document No: Z3426188112 | Period: 07/18/2026 to 07/24/2026 | Amount: $91.25'
+    },
+    {
+        id: 'sub_Z3426188112',
+        woKey: 'Z3426188112',
+        date: '2026-08-04',
+        stage: 'tipalti_submitted',
+        title: 'Tipalti Submitted ($91.25)',
+        amount: 91.25,
+        statusText: '🟡 Tipalti Submitted (Z3426188112)',
+        details: 'Submitted to Tipalti | Amount: $91.25'
+    },
+    {
+        id: 'clr_PTIP1402590Z2426',
+        woKey: 'Z3426188112',
+        date: '2026-08-05',
+        stage: 'cleared',
+        title: 'Payment Cleared (PTIP1402590Z2426)',
+        amount: 91.25,
+        amountIdr: 'Rp 1.583.237,00',
+        statusText: '🟢 Payment Cleared to Bank ($91.25 / Rp 1.583.237,00)',
+        details: 'Doc Ref: PTIP1402590Z2426 | USD $91.25 -> IDR Rp 1.583.237,00'
+    },
+
+    // Work Order 2 ($90.85 - Z3426186860)
+    {
+        id: 'wo_Z3426186860',
+        woKey: 'Z3426186860',
+        date: '2026-07-27',
+        stage: 'wo_created',
+        title: 'Work Order Created (Z3426186860)',
+        amount: 90.85,
+        statusText: '🔵 Work Order Created (Z3426186860)',
+        details: 'Document No: Z3426186860 | Amount: $90.85'
+    },
+    {
+        id: 'sub_Z3426186860',
+        woKey: 'Z3426186860',
+        date: '2026-08-04',
+        stage: 'tipalti_submitted',
+        title: 'Tipalti Submitted ($90.85)',
+        amount: 90.85,
+        statusText: '🟡 Tipalti Submitted (Z3426186860)',
+        details: 'Submitted to Tipalti | Amount: $90.85'
+    },
+    {
+        id: 'clr_Z3426186860',
+        woKey: 'Z3426186860',
+        date: '2026-07-29',
+        stage: 'cleared',
+        title: 'Payment Cleared ($90.85)',
+        amount: 90.85,
+        statusText: '🟢 Payment Cleared ($90.85)',
+        details: 'Document No: Z3426186860 | Amount: $90.85'
+    },
+
+    // Work Order 3 ($91.25 - Cleared Jul 29)
+    {
+        id: 'clr_Jul29_9125',
+        woKey: 'Z3426188112_Jul29',
+        date: '2026-07-29',
+        stage: 'cleared',
+        title: 'Payment Cleared ($91.25)',
+        amount: 91.25,
+        amountIdr: 'Rp 1.583.237,00',
+        statusText: '🟢 Payment Cleared ($91.25 / Rp 1.583.237,00)',
+        details: 'USD $91.25 -> IDR Rp 1.583.237,00'
+    }
+];
+
+let paymentEvents = [...DEFAULT_PAYMENT_EVENTS];
 let calendarCurrentDate = new Date();
 const GOOGLE_CLIENT_ID = '848704186375-qcg8qv6rugiaud1fqan4raoi8nb5s2uf.apps.googleusercontent.com';
 let tokenClient = null;
@@ -1529,7 +1609,14 @@ let tokenClient = null;
 function initPaymentCalendar() {
     const savedPayments = localStorage.getItem('multimango_payments');
     if (savedPayments) {
-        try { paymentEvents = JSON.parse(savedPayments); } catch(e) {}
+        try {
+            const parsed = JSON.parse(savedPayments);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+                paymentEvents = parsed;
+            }
+        } catch(e) {}
+    } else {
+        localStorage.setItem('multimango_payments', JSON.stringify(paymentEvents));
     }
 
     const tabShift = document.getElementById('tab-shift-tracker');
@@ -1704,29 +1791,18 @@ function upsertPaymentEvent(evt) {
 }
 
 function getCleanDeduplicatedPayments() {
-    // Deduplicate per (stage + amount) so all 3 stages (WO Created, Tipalti Proc, Cleared) REMAIN VISIBLE
-    // while eliminating temporary alias/fallback duplicate badges like SUB_91.25 or wo_2026...
-    const stageAmountMap = new Map();
+    const seen = new Set();
+    const result = [];
 
     paymentEvents.forEach(evt => {
-        const amtKey = (evt.amount || 0).toFixed(2);
-        const stageKey = `${evt.stage}_${amtKey}`;
-
-        if (!stageAmountMap.has(stageKey)) {
-            stageAmountMap.set(stageKey, evt);
-        } else {
-            const existing = stageAmountMap.get(stageKey);
-            // Prefer official document numbers (Z342... / PTIP...) over fallback codes (SUB_... / wo_... / tipalti_...)
-            const isExistingOfficial = existing.woKey && (existing.woKey.startsWith('Z342') || existing.woKey.startsWith('PTIP'));
-            const isCurrentOfficial = evt.woKey && (evt.woKey.startsWith('Z342') || evt.woKey.startsWith('PTIP'));
-
-            if (isCurrentOfficial || (!isExistingOfficial && evt.id >= existing.id)) {
-                stageAmountMap.set(stageKey, evt);
-            }
+        const uniqueKey = evt.id || `${evt.woKey}_${evt.stage}_${evt.date}`;
+        if (!seen.has(uniqueKey)) {
+            seen.add(uniqueKey);
+            result.push(evt);
         }
     });
 
-    return Array.from(stageAmountMap.values());
+    return result;
 }
 
 function renderPaymentCalendar() {

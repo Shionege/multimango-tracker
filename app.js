@@ -560,7 +560,9 @@ async function fetchFromCloud() {
             if (data && typeof data === 'object') {
                 let hasChanges = false;
                 if (data.logs && Array.isArray(data.logs)) {
-                    const cleanLogs = deduplicateLogs(data.logs);
+                    // Smart Bidirectional Merging: Combine local logs + cloud logs so no entries are lost
+                    const combinedLogs = [...logs, ...data.logs];
+                    const cleanLogs = deduplicateLogs(combinedLogs);
                     if (JSON.stringify(logs) !== JSON.stringify(cleanLogs)) {
                         logs = cleanLogs;
                         localStorage.setItem('multimango_logs', JSON.stringify(logs));
@@ -568,8 +570,11 @@ async function fetchFromCloud() {
                     }
                 }
                 if (data.payments && Array.isArray(data.payments)) {
-                    if (JSON.stringify(paymentEvents) !== JSON.stringify(data.payments)) {
-                        paymentEvents = data.payments;
+                    // Smart Bidirectional Merging for Payment Events
+                    const combinedPayments = [...paymentEvents, ...data.payments];
+                    const cleanPayments = deduplicatePaymentEvents(combinedPayments);
+                    if (JSON.stringify(paymentEvents) !== JSON.stringify(cleanPayments)) {
+                        paymentEvents = cleanPayments;
                         localStorage.setItem('multimango_payments', JSON.stringify(paymentEvents));
                         hasChanges = true;
                     }
@@ -620,6 +625,20 @@ function deduplicateLogs(logsArray) {
         if (!seen.has(key)) {
             seen.add(key);
             result.push(log);
+        }
+    }
+    return result;
+}
+
+function deduplicatePaymentEvents(paymentsArray) {
+    if (!Array.isArray(paymentsArray)) return [];
+    const seen = new Set();
+    const result = [];
+    for (const p of paymentsArray) {
+        const key = p.woKey || p.id;
+        if (!seen.has(key)) {
+            seen.add(key);
+            result.push(p);
         }
     }
     return result;

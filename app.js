@@ -13,8 +13,8 @@ const shiftStatusText = document.getElementById('shift-status-text');
 const shiftDurationTimer = document.getElementById('shift-duration-timer');
 
 const counterDisplay = document.getElementById('counter-display');
-const btnPlusTask = document.getElementById('btn-increment') || document.getElementById('btn-plus-task');
-const btnMinusTask = document.getElementById('btn-undo-task') || document.getElementById('btn-minus-task');
+const btnPlusTask = document.getElementById('btn-plus-task');
+const btnMinusTask = document.getElementById('btn-minus-task');
 const counterAuditLog = document.getElementById('counter-audit-log');
 
 // --- TIME STEPPER HELPERS ---
@@ -177,7 +177,7 @@ const btnExportJson = document.getElementById('btn-export-json');
 const btnImportJson = document.getElementById('btn-import-json');
 const fileImportInput = document.getElementById('file-import-input');
 
-const logsTbody = document.getElementById('logs-tbody') || document.getElementById('history-table-body');
+const logsTbody = document.getElementById('logs-tbody');
 const emptyState = document.getElementById('empty-state');
 
 // Edit Modal Elements
@@ -481,7 +481,6 @@ if (savedOverriddenUrl && savedOverriddenAuth) {
 // Save to LocalStorage & File System & Cloud Sync
 function saveData() {
     localStorage.setItem('multimango_logs', JSON.stringify(logs));
-    localStorage.setItem('multimango_payments', JSON.stringify(paymentEvents));
     if (activeShift) {
         localStorage.setItem('multimango_active_shift', JSON.stringify(activeShift));
     } else {
@@ -506,7 +505,6 @@ async function saveToCloud() {
     const payload = {
         logs: logs,
         activeShift: activeShift,
-        payments: paymentEvents,
         lastSaved: new Date().toISOString()
     };
 
@@ -548,7 +546,7 @@ async function fetchFromCloud() {
             
             if (data === null) {
                 // Cloud DB is valid but empty; if we have local logs, upload them to initialize cloud
-                if (logs.length > 0 || activeShift || paymentEvents.length > 0) {
+                if (logs.length > 0 || activeShift) {
                     await saveToCloud();
                 } else if (statusEl) {
                     statusEl.innerHTML = '● Cloud: Synced';
@@ -560,22 +558,12 @@ async function fetchFromCloud() {
             if (data && typeof data === 'object') {
                 let hasChanges = false;
                 if (data.logs && Array.isArray(data.logs)) {
-                    // Smart Bidirectional Merging: Combine local logs + cloud logs so no entries are lost
+                    // Smart Bidirectional Merging
                     const combinedLogs = [...logs, ...data.logs];
                     const cleanLogs = deduplicateLogs(combinedLogs);
                     if (JSON.stringify(logs) !== JSON.stringify(cleanLogs)) {
                         logs = cleanLogs;
                         localStorage.setItem('multimango_logs', JSON.stringify(logs));
-                        hasChanges = true;
-                    }
-                }
-                if (data.payments && Array.isArray(data.payments)) {
-                    // Smart Bidirectional Merging for Payment Events
-                    const combinedPayments = [...paymentEvents, ...data.payments];
-                    const cleanPayments = deduplicatePaymentEvents(combinedPayments);
-                    if (JSON.stringify(paymentEvents) !== JSON.stringify(cleanPayments)) {
-                        paymentEvents = cleanPayments;
-                        localStorage.setItem('multimango_payments', JSON.stringify(paymentEvents));
                         hasChanges = true;
                     }
                 }
@@ -593,7 +581,6 @@ async function fetchFromCloud() {
                 
                 if (hasChanges) {
                     renderLogs();
-                    if (typeof renderPaymentCalendar === 'function') renderPaymentCalendar();
                     if (activeShift) resumeActiveShift();
                     else updateUIForInactiveShift();
                 }
@@ -625,20 +612,6 @@ function deduplicateLogs(logsArray) {
         if (!seen.has(key)) {
             seen.add(key);
             result.push(log);
-        }
-    }
-    return result;
-}
-
-function deduplicatePaymentEvents(paymentsArray) {
-    if (!Array.isArray(paymentsArray)) return [];
-    const seen = new Set();
-    const result = [];
-    for (const p of paymentsArray) {
-        const key = p.woKey || p.id;
-        if (!seen.has(key)) {
-            seen.add(key);
-            result.push(p);
         }
     }
     return result;
@@ -726,18 +699,13 @@ function initEventListeners() {
         btnSyncFolder.addEventListener('click', selectSyncFolder);
     }
 
-    // Shift Start/End buttons & Manual Add
-    if (btnStartShift) btnStartShift.addEventListener('click', startShift);
-    if (btnEndShift) btnEndShift.addEventListener('click', endShift);
-
-    const btnAddManualLog = document.getElementById('btn-add-manual-log');
-    if (btnAddManualLog) {
-        btnAddManualLog.addEventListener('click', addManualShiftLog);
-    }
+    // Shift Start/End buttons
+    btnStartShift.addEventListener('click', startShift);
+    btnEndShift.addEventListener('click', endShift);
 
     // Task Counter buttons
-    if (btnPlusTask) btnPlusTask.addEventListener('click', incrementTask);
-    if (btnMinusTask) btnMinusTask.addEventListener('click', decrementTask);
+    btnPlusTask.addEventListener('click', incrementTask);
+    btnMinusTask.addEventListener('click', decrementTask);
 
     // Keyboard Shortcuts
     document.addEventListener('keydown', handleKeyboardShortcuts);
@@ -764,99 +732,16 @@ function initEventListeners() {
         btnClearFilters.addEventListener('click', clearFilters);
     }
 
-    // Export/Import/Restore
-    if (btnExportCsv) btnExportCsv.addEventListener('click', exportToCSV);
-    if (btnExportJson) btnExportJson.addEventListener('click', exportToJSON);
-    if (btnImportJson) btnImportJson.addEventListener('click', () => fileImportInput && fileImportInput.click());
-    if (fileImportInput) fileImportInput.addEventListener('change', importFromJSON);
-
-    const btnForceRestore = document.getElementById('btn-force-restore-cloud');
-    if (btnForceRestore) {
-        btnForceRestore.addEventListener('click', async () => {
-            showToast('Fetching & restoring full history from Firebase Cloud...', 'info');
-            const res = await fetchFromCloud();
-            if (res) {
-                renderLogs();
-                showToast('All 31 history logs restored from Firebase Cloud!', 'success');
-            } else {
-                showToast('Failed to connect to Firebase Cloud.', 'danger');
-            }
-        });
-    }
-
-    // Batch Add Modal Events
-    const btnOpenBatch = document.getElementById('btn-open-batch-modal');
-    const batchModal = document.getElementById('batch-modal');
-    const btnCloseBatch = document.getElementById('btn-close-batch-modal');
-    const btnCancelBatch = document.getElementById('btn-cancel-batch');
-    const btnSubmitBatch = document.getElementById('btn-submit-batch');
-    const batchTextInput = document.getElementById('batch-text-input');
-
-    if (btnOpenBatch && batchModal) {
-        btnOpenBatch.addEventListener('click', () => batchModal.classList.add('active'));
-    }
-    const closeBatchModal = () => batchModal && batchModal.classList.remove('active');
-    if (btnCloseBatch) btnCloseBatch.addEventListener('click', closeBatchModal);
-    if (btnCancelBatch) btnCancelBatch.addEventListener('click', closeBatchModal);
-
-    if (btnSubmitBatch && batchTextInput) {
-        btnSubmitBatch.addEventListener('click', () => {
-            const rawText = batchTextInput.value.trim();
-            if (!rawText) {
-                showToast('Please paste or type shift entries!', 'danger');
-                return;
-            }
-            const lines = rawText.split('\n');
-            let addedCount = 0;
-
-            lines.forEach(line => {
-                const parts = line.trim().split(/\s+/);
-                if (parts.length >= 3) {
-                    const dateStr = parts[0];
-                    const timeRange = parts[1];
-                    const tasksCount = parseInt(parts[2]) || 0;
-                    
-                    const timeParts = timeRange.split('-');
-                    if (timeParts.length === 2) {
-                        const startTime = timeParts[0];
-                        const endTime = timeParts[1];
-                        const duration = getDurationHours(startTime, endTime);
-
-                        if (dateStr && duration > 0) {
-                            const rate = Number((tasksCount / duration).toFixed(2));
-                            logs.push({
-                                id: Date.now().toString() + '_' + Math.random().toString(36).substr(2, 4),
-                                shiftId: 'batch_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
-                                date: dateStr,
-                                startTime: startTime,
-                                endTime: endTime,
-                                duration: duration,
-                                tasks: tasksCount,
-                                rate: rate
-                            });
-                            addedCount++;
-                        }
-                    }
-                }
-            });
-
-            if (addedCount > 0) {
-                logs.sort((a, b) => b.id.localeCompare(a.id));
-                saveData();
-                renderLogs();
-                batchTextInput.value = '';
-                closeBatchModal();
-                showToast(`Successfully added ${addedCount} shift entries to history!`, 'success');
-            } else {
-                showToast('Could not parse shift lines. Check format: YYYY-MM-DD Start-End Tasks', 'danger');
-            }
-        });
-    }
+    // Export/Import
+    btnExportCsv.addEventListener('click', exportToCSV);
+    btnExportJson.addEventListener('click', exportToJSON);
+    btnImportJson.addEventListener('click', () => fileImportInput.click());
+    fileImportInput.addEventListener('change', importFromJSON);
 
     // Modal Events
-    if (btnCloseModal) btnCloseModal.addEventListener('click', closeModal);
-    if (btnCancelEdit) btnCancelEdit.addEventListener('click', closeModal);
-    if (btnSaveEdit) btnSaveEdit.addEventListener('click', saveEdit);
+    btnCloseModal.addEventListener('click', closeModal);
+    btnCancelEdit.addEventListener('click', closeModal);
+    btnSaveEdit.addEventListener('click', saveEdit);
 
     // Set Now / Today Helper Buttons
     const btnDateToday = document.getElementById('btn-date-today');
@@ -1153,42 +1038,6 @@ function updateUIForInactiveShift() {
     if (liveTimerInterval) clearInterval(liveTimerInterval);
 }
 
-function addManualShiftLog() {
-    const date = shiftDateInput.value;
-    const startTime = getStepperTime('shift-start');
-    const endTime = getStepperTime('shift-end');
-    const tasks = parseInt(counterDisplay.textContent) || 0;
-
-    if (!date || !startTime || !endTime) {
-        showToast('Please select shift date, start time, and end time!', 'danger');
-        return;
-    }
-
-    const duration = getDurationHours(startTime, endTime);
-    if (duration <= 0) {
-        showToast('End Time must be later than Start Time!', 'danger');
-        return;
-    }
-
-    const rate = duration > 0 ? Number((tasks / duration).toFixed(2)) : 0;
-    const newLog = {
-        id: Date.now().toString(),
-        shiftId: 'manual_' + Date.now(),
-        date: date,
-        startTime: startTime,
-        endTime: endTime,
-        duration: duration,
-        tasks: tasks,
-        rate: rate
-    };
-
-    logs.push(newLog);
-    logs.sort((a, b) => b.id.localeCompare(a.id));
-    saveData();
-    renderLogs();
-    showToast(`Saved completed shift log for ${date} (${duration.toFixed(2)}h, ${tasks} tasks)!`, 'success');
-}
-
 function endShift() {
     if (!activeShift) return;
 
@@ -1342,11 +1191,8 @@ function toggleDailyDetail(dateStr) {
 }
 
 function renderLogs() {
-    const targetTbody = document.getElementById('logs-tbody') || document.getElementById('history-table-body');
-    if (!targetTbody) return;
-
-    const startFilter = filterStartDate ? filterStartDate.value : '';
-    const endFilter = filterEndDate ? filterEndDate.value : '';
+    const startFilter = filterStartDate.value;
+    const endFilter = filterEndDate.value;
 
     let filtered = logs;
 
@@ -1357,13 +1203,12 @@ function renderLogs() {
         filtered = filtered.filter(log => log.date <= endFilter);
     }
 
-    targetTbody.innerHTML = '';
+    logsTbody.innerHTML = '';
 
-    const emptyEl = document.getElementById('empty-state');
     if (filtered.length === 0) {
-        if (emptyEl) emptyEl.style.display = 'flex';
+        emptyState.style.display = 'flex';
     } else {
-        if (emptyEl) emptyEl.style.display = 'none';
+        emptyState.style.display = 'none';
 
         // Group filtered logs by Date (YYYY-MM-DD)
         const groups = {};
@@ -1421,7 +1266,7 @@ function renderLogs() {
                 </td>
                 <td class="col-action"></td>
             `;
-            targetTbody.appendChild(mainTr);
+            logsTbody.appendChild(mainTr);
 
             // 2. Expandable Shift Detail Sub-Rows (8 Columns)
             if (isExpanded) {
@@ -1454,7 +1299,7 @@ function renderLogs() {
                             </div>
                         </td>
                     `;
-                    targetTbody.appendChild(subTr);
+                    logsTbody.appendChild(subTr);
                 });
             }
         });
@@ -1503,15 +1348,15 @@ function calculateStats(filteredList) {
 
 function resetFilters() {
     const todayStr = getTodayDateString();
-    if (filterStartDate) filterStartDate.value = todayStr;
-    if (filterEndDate) filterEndDate.value = todayStr;
+    filterStartDate.value = todayStr;
+    filterEndDate.value = todayStr;
     renderLogs();
     showToast('Filters reset to Today', 'info');
 }
 
 function clearFilters() {
-    if (filterStartDate) filterStartDate.value = '';
-    if (filterEndDate) filterEndDate.value = '';
+    filterStartDate.value = '';
+    filterEndDate.value = '';
     renderLogs();
     showToast('Showing all historical logs', 'info');
 }
@@ -1659,575 +1504,3 @@ function importFromJSON(e) {
     };
     reader.readAsText(file);
 }
-
-// ==========================================================================
-// PAYMENT CALENDAR & GMAIL AUTO-SYNC ENGINE
-// ==========================================================================
-
-let paymentEvents = [];
-let currentCalDate = new Date();
-const GOOGLE_CLIENT_ID = '848704186375-qcg8qv6rugiaud1fqan4raoi8nb5s2uf.apps.googleusercontent.com';
-let tokenClient = null;
-
-// Initialize saved payment events on startup
-(function initPaymentsState() {
-    const savedPayments = localStorage.getItem('multimango_payments');
-    if (savedPayments) {
-        try {
-            paymentEvents = JSON.parse(savedPayments);
-        } catch(e) {
-            paymentEvents = [];
-        }
-    }
-})();
-
-// Navigation View Mode Tabs
-document.addEventListener('DOMContentLoaded', () => {
-    const tabShiftTracker = document.getElementById('tab-shift-tracker');
-    const tabPaymentCalendar = document.getElementById('tab-payment-calendar');
-    const viewShiftTracker = document.getElementById('view-shift-tracker');
-    const viewPaymentCalendar = document.getElementById('view-payment-calendar');
-
-    if (tabShiftTracker && tabPaymentCalendar) {
-        tabShiftTracker.addEventListener('click', () => {
-            tabShiftTracker.classList.add('active');
-            tabPaymentCalendar.classList.remove('active');
-            viewShiftTracker.classList.add('active');
-            viewPaymentCalendar.classList.remove('active');
-        });
-
-        tabPaymentCalendar.addEventListener('click', () => {
-            tabPaymentCalendar.classList.add('active');
-            tabShiftTracker.classList.remove('active');
-            viewPaymentCalendar.classList.add('active');
-            viewShiftTracker.classList.remove('active');
-            renderPaymentCalendar();
-        });
-    }
-
-    // Month Navigation Controls
-    const btnCalPrev = document.getElementById('btn-cal-prev-month');
-    const btnCalNext = document.getElementById('btn-cal-next-month');
-    if (btnCalPrev && btnCalNext) {
-        btnCalPrev.addEventListener('click', () => {
-            currentCalDate.setMonth(currentCalDate.getMonth() - 1);
-            renderPaymentCalendar();
-        });
-        btnCalNext.addEventListener('click', () => {
-            currentCalDate.setMonth(currentCalDate.getMonth() + 1);
-            renderPaymentCalendar();
-        });
-    }
-
-    // Gmail Connect Button
-    const btnConnectGmail = document.getElementById('btn-connect-gmail');
-    if (btnConnectGmail) {
-        btnConnectGmail.addEventListener('click', handleGmailConnect);
-    }
-
-    // Close Payment Modal
-    const btnClosePayModal = document.getElementById('btn-close-pay-modal');
-    const payModal = document.getElementById('payment-modal');
-    if (btnClosePayModal && payModal) {
-        btnClosePayModal.addEventListener('click', () => {
-            payModal.classList.remove('active');
-        });
-    }
-
-    // Auto-restore saved Gmail token on load
-    const savedGmailToken = localStorage.getItem('gmail_token');
-    if (savedGmailToken) {
-        updateGmailStatusUI(true);
-        fetchGmailPayments(savedGmailToken);
-    }
-
-    // Initial render of calendar
-    renderPaymentCalendar();
-});
-
-// Google Identity Services (GIS) Auth Initializer
-function handleGmailConnect() {
-    // If we already have a saved token, try syncing first
-    const savedToken = localStorage.getItem('gmail_token');
-
-    if (typeof google === 'undefined' || !google.accounts || !google.accounts.oauth2) {
-        showToast('Google API Client Library loading... Please try again in a moment.', 'danger');
-        return;
-    }
-
-    if (!tokenClient) {
-        tokenClient = google.accounts.oauth2.initTokenClient({
-            client_id: GOOGLE_CLIENT_ID,
-            scope: 'https://www.googleapis.com/auth/gmail.readonly',
-            callback: async (response) => {
-                if (response.error) {
-                    showToast('Gmail authentication error: ' + response.error, 'danger');
-                    return;
-                }
-                if (response.access_token) {
-                    localStorage.setItem('gmail_token', response.access_token);
-                    updateGmailStatusUI(true);
-                    showToast('Gmail connected! Scanning Work Orders & Payments...', 'success');
-                    await fetchGmailPayments(response.access_token);
-                }
-            }
-        });
-    }
-
-    tokenClient.requestAccessToken();
-}
-
-function updateGmailStatusUI(isConnected) {
-    const statusBadge = document.getElementById('gmail-sync-status');
-    const btnText = document.getElementById('gmail-btn-text');
-    if (statusBadge) {
-        if (isConnected) {
-            statusBadge.textContent = '● Gmail: Connected';
-            statusBadge.classList.add('connected');
-        } else {
-            statusBadge.textContent = '● Gmail: Not Connected';
-            statusBadge.classList.remove('connected');
-        }
-    }
-    if (btnText) {
-        btnText.textContent = isConnected ? 'Sync Gmail Now' : 'Connect Gmail Auto-Sync';
-    }
-}
-
-// Fetch & Parse Gmail Payments
-async function fetchGmailPayments(accessToken) {
-    if (!accessToken) return;
-    const query = 'no-reply@rws.com OR rws-payments@rws.com OR "Work Order Created" OR "Payment submitted" OR "Tipalti payment processed"';
-    const listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(query)}&maxResults=100`;
-
-    try {
-        const res = await fetch(listUrl, {
-            headers: { 'Authorization': `Bearer ${accessToken}` }
-        });
-        if (res.status === 401 || res.status === 403) {
-            localStorage.removeItem('gmail_token');
-            updateGmailStatusUI(false);
-            showToast('Gmail session expired. Please click "Connect Gmail" to re-authenticate.', 'info');
-            return;
-        }
-        if (!res.ok) throw new Error('Gmail API HTTP error ' + res.status);
-        const data = await res.json();
-        
-        if (!data.messages || data.messages.length === 0) {
-            showToast('No RWS/Tipalti payment emails found in your Inbox.', 'info');
-            return;
-        }
-
-        let newEventsFound = 0;
-
-        for (const msg of data.messages) {
-            const msgUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=full`;
-            const msgRes = await fetch(msgUrl, {
-                headers: { 'Authorization': `Bearer ${accessToken}` }
-            });
-            if (msgRes.ok) {
-                const msgData = await msgRes.json();
-                const processed = await parseSingleGmailMessage(msgData, accessToken);
-                if (processed) newEventsFound++;
-            }
-        }
-
-        saveData();
-        renderPaymentCalendar();
-        showToast(`Gmail Sync Complete! ${newEventsFound} payment milestones updated.`, 'success');
-    } catch (e) {
-        console.warn('Error fetching Gmail messages:', e);
-        showToast('Could not fetch Gmail emails: ' + e.message, 'danger');
-    }
-}
-
-// Single Email Message Parser
-async function parseSingleGmailMessage(msgData, accessToken) {
-    const headers = msgData.payload.headers || [];
-    const subject = (headers.find(h => h.name.toLowerCase() === 'subject') || {}).value || '';
-    const internalDate = Number(msgData.internalDate || Date.now());
-    const emailDateStr = new Date(internalDate).toISOString().split('T')[0];
-
-    let bodyText = extractEmailBodyText(msgData.payload);
-    let attachmentHtml = '';
-
-    // Check for HTML Attachment (e.g. Work Order Document)
-    const parts = msgData.payload.parts || [];
-    for (const part of parts) {
-        if (part.filename && (part.filename.endsWith('.html') || part.filename.endsWith('.htm')) && part.body && part.body.attachmentId) {
-            try {
-                const attachUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msgData.id}/attachments/${part.body.attachmentId}`;
-                const attachRes = await fetch(attachUrl, { headers: { 'Authorization': `Bearer ${accessToken}` } });
-                if (attachRes.ok) {
-                    const attachData = await attachRes.json();
-                    if (attachData.data) {
-                        attachmentHtml = atob(attachData.data.replace(/-/g, '+').replace(/_/g, '/'));
-                    }
-                }
-            } catch(e){}
-        }
-    }
-
-    let modified = false;
-
-    // EVENT TYPE 1: WORK ORDER CREATED
-    if (subject.toLowerCase().includes('work order created')) {
-        let docNo = '';
-        let amountUsd = 0;
-        let workPeriodStart = '';
-        let workPeriodEnd = '';
-        let projectName = '';
-
-        // Match Doc No in Body/Subject (e.g., Z3426188112)
-        const docMatch = (bodyText + attachmentHtml).match(/Z\d{9,12}/i);
-        if (docMatch) docNo = docMatch[0];
-
-        // Match Work Period Range (e.g., 07/18/2026_to_07/24/2026)
-        const periodMatch = (bodyText + attachmentHtml).match(/(\d{2}\/\d{2}\/\d{4})_to_(\d{2}\/\d{2}\/\d{4})/);
-        if (periodMatch) {
-            workPeriodStart = convertUsDateToIso(periodMatch[1]);
-            workPeriodEnd = convertUsDateToIso(periodMatch[2]);
-        }
-
-        // Match Total Amount USD
-        const amountMatch = (bodyText + attachmentHtml).match(/Total Amount:[\s\S]*?(\d+\.\d{2})|Total USD[\s\S]*?(\d+\.\d{2})/i);
-        if (amountMatch) {
-            amountUsd = Number(amountMatch[1] || amountMatch[2]);
-        }
-
-        // Match Project Name
-        const projMatch = (bodyText + attachmentHtml).match(/META_[A-Z0-9_]+/i);
-        if (projMatch) projectName = projMatch[0];
-
-        if (docNo || amountUsd > 0) {
-            const woKey = docNo || `WO_${emailDateStr}_${amountUsd}`;
-            let existing = paymentEvents.find(p => p.woKey === woKey);
-            if (!existing) {
-                existing = {
-                    id: 'pay_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
-                    woKey: woKey,
-                    docNo: docNo || woKey,
-                    amountUsd: amountUsd,
-                    amountIdr: 0,
-                    workPeriodStart: workPeriodStart,
-                    workPeriodEnd: workPeriodEnd,
-                    projectName: projectName,
-                    stage1Date: emailDateStr,
-                    stage2Date: null,
-                    stage3Date: null,
-                    status: 'WO_CREATED'
-                };
-                paymentEvents.push(existing);
-                modified = true;
-            } else {
-                if (workPeriodStart) existing.workPeriodStart = workPeriodStart;
-                if (workPeriodEnd) existing.workPeriodEnd = workPeriodEnd;
-                if (amountUsd > 0) existing.amountUsd = amountUsd;
-                modified = true;
-            }
-        }
-    }
-
-    // EVENT TYPE 2: RWS PAYMENT SUBMITTED
-    else if (subject.toLowerCase().includes('payment submitted')) {
-        let amountUsd = 0;
-        let subDate = emailDateStr;
-
-        const amtMatch = bodyText.match(/Amount:\s*(\d+\.\d{2})/i);
-        if (amtMatch) amountUsd = Number(amtMatch[1]);
-
-        const dateMatch = bodyText.match(/(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2},\s+\d{4}/i);
-        if (dateMatch) {
-            try { subDate = new Date(dateMatch[0]).toISOString().split('T')[0]; } catch(e){}
-        }
-
-        if (amountUsd > 0) {
-            // Find existing event by amount or update latest pending
-            let target = paymentEvents.find(p => p.amountUsd === amountUsd && !p.stage2Date);
-            if (!target) target = paymentEvents.find(p => !p.stage2Date);
-
-            if (target) {
-                target.stage2Date = subDate;
-                if (target.status === 'WO_CREATED') target.status = 'PROCESSING';
-                modified = true;
-            } else {
-                paymentEvents.push({
-                    id: 'pay_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
-                    woKey: `SUB_${subDate}_${amountUsd}`,
-                    docNo: `SUB_${amountUsd}`,
-                    amountUsd: amountUsd,
-                    amountIdr: 0,
-                    workPeriodStart: '',
-                    workPeriodEnd: '',
-                    projectName: '',
-                    stage1Date: subDate,
-                    stage2Date: subDate,
-                    stage3Date: null,
-                    status: 'PROCESSING'
-                });
-                modified = true;
-            }
-        }
-    }
-
-    // EVENT TYPE 3: TIPALTI PAYMENT PROCESSED SUCCESSFULLY
-    else if (subject.toLowerCase().includes('payment processed successfully')) {
-        let amountUsd = 0;
-        let amountIdr = 0;
-        let docRef = '';
-
-        const usdMatch = bodyText.match(/USD\s+(\d+\.\d{2})/i);
-        if (usdMatch) amountUsd = Number(usdMatch[1]);
-
-        const idrMatch = bodyText.match(/IDR\s+([\d,]+(?:\.\d{2})?)/i);
-        if (idrMatch) {
-            amountIdr = Number(idrMatch[1].replace(/,/g, ''));
-        }
-
-        const refMatch = bodyText.match(/PTIP[A-Z0-9]+/i);
-        if (refMatch) docRef = refMatch[0];
-
-        if (amountUsd > 0 || amountIdr > 0) {
-            let target = paymentEvents.find(p => p.amountUsd === amountUsd && !p.stage3Date);
-            if (!target) target = paymentEvents.find(p => !p.stage3Date);
-
-            if (target) {
-                target.stage3Date = emailDateStr;
-                if (amountIdr > 0) target.amountIdr = amountIdr;
-                if (docRef) target.docRef = docRef;
-                target.status = 'CLEARED';
-                modified = true;
-            } else {
-                paymentEvents.push({
-                    id: 'pay_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
-                    woKey: docRef || `PAID_${emailDateStr}_${amountUsd}`,
-                    docNo: docRef || `PAID_${amountUsd}`,
-                    amountUsd: amountUsd,
-                    amountIdr: amountIdr,
-                    workPeriodStart: '',
-                    workPeriodEnd: '',
-                    projectName: '',
-                    stage1Date: emailDateStr,
-                    stage2Date: emailDateStr,
-                    stage3Date: emailDateStr,
-                    status: 'CLEARED'
-                });
-                modified = true;
-            }
-        }
-    }
-
-    return modified;
-}
-
-// Helper: Extract Email Body Text
-function extractEmailBodyText(payload) {
-    if (!payload) return '';
-    if (payload.body && payload.body.data) {
-        return atob(payload.body.data.replace(/-/g, '+').replace(/_/g, '/'));
-    }
-    if (payload.parts && payload.parts.length > 0) {
-        let text = '';
-        for (const part of payload.parts) {
-            text += extractEmailBodyText(part);
-        }
-        return text;
-    }
-    return '';
-}
-
-// Helper: Convert MM/DD/YYYY to YYYY-MM-DD
-function convertUsDateToIso(usDateStr) {
-    const parts = usDateStr.split('/');
-    if (parts.length === 3) {
-        return `${parts[2]}-${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}`;
-    }
-    return usDateStr;
-}
-
-// Render Payment Calendar Grid & Summary Widgets
-function renderPaymentCalendar() {
-    const monthTitle = document.getElementById('cal-month-year-title');
-    const grid = document.getElementById('calendar-grid');
-    if (!grid) return;
-
-    grid.innerHTML = '';
-
-    const year = currentCalDate.getFullYear();
-    const month = currentCalDate.getMonth();
-
-    const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-    if (monthTitle) monthTitle.textContent = `${monthNames[month]} ${year}`;
-
-    // Get First Day of Month (0 = Sun, 1 = Mon, ..., 6 = Sat)
-    const firstDay = new Date(year, month, 1);
-    let startDayOfWeek = firstDay.getDay(); // 0 is Sun
-    if (startDayOfWeek === 0) startDayOfWeek = 7; // Convert to Mon=1, ..., Sun=7
-
-    const lastDayOfMonth = new Date(year, month + 1, 0).getDate();
-    const prevMonthLastDay = new Date(year, month, 0).getDate();
-
-    const todayStr = getTodayDateString();
-
-    // Render Previous Month Padding Cells
-    for (let i = startDayOfWeek - 1; i > 0; i--) {
-        const pDay = prevMonthLastDay - i + 1;
-        const cell = document.createElement('div');
-        cell.className = 'calendar-cell other-month';
-        cell.innerHTML = `<div class="cal-date-num">${pDay}</div>`;
-        grid.appendChild(cell);
-    }
-
-    // Map Events by Date
-    const eventsByDate = {};
-    paymentEvents.forEach(evt => {
-        if (evt.stage1Date) addEventToMap(eventsByDate, evt.stage1Date, evt, 1);
-        if (evt.stage2Date) addEventToMap(eventsByDate, evt.stage2Date, evt, 2);
-        if (evt.stage3Date) addEventToMap(eventsByDate, evt.stage3Date, evt, 3);
-    });
-
-    // Render Current Month Cells
-    for (let day = 1; day <= lastDayOfMonth; day++) {
-        const dayStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-        const cell = document.createElement('div');
-        cell.className = 'calendar-cell';
-        if (dayStr === todayStr) cell.classList.add('today');
-
-        let cellContent = `<div class="cal-date-num">${day}</div>`;
-
-        if (eventsByDate[dayStr]) {
-            eventsByDate[dayStr].forEach(item => {
-                const stageClass = item.stage === 1 ? 'stage-1' : (item.stage === 2 ? 'stage-2' : 'stage-3');
-                const stageLabel = item.stage === 1 ? 'WO Created' : (item.stage === 2 ? 'Tipalti Proc' : 'Cleared');
-                const amountText = item.evt.amountUsd > 0 ? `$${item.evt.amountUsd.toFixed(2)}` : '';
-
-                cellContent += `
-                    <div class="cal-event-badge ${stageClass}" onclick="openPaymentEventDetail('${item.evt.id}')">
-                        <span class="cal-event-title">${item.evt.docNo || 'WO'} (${stageLabel})</span>
-                        <span class="cal-event-amount">${amountText}</span>
-                    </div>
-                `;
-            });
-        }
-
-        cell.innerHTML = cellContent;
-        grid.appendChild(cell);
-    }
-
-    // Render Next Month Padding Cells
-    const totalCells = grid.children.length;
-    const remainingCells = (7 - (totalCells % 7)) % 7;
-    for (let i = 1; i <= remainingCells; i++) {
-        const cell = document.createElement('div');
-        cell.className = 'calendar-cell other-month';
-        cell.innerHTML = `<div class="cal-date-num">${i}</div>`;
-        grid.appendChild(cell);
-    }
-
-    // Render Summary Widgets
-    updatePaymentSummaryWidgets();
-}
-
-function addEventToMap(map, dateStr, evt, stage) {
-    if (!map[dateStr]) map[dateStr] = [];
-    // Avoid duplicate stage entries on same date
-    if (!map[dateStr].some(e => e.evt.id === evt.id && e.stage === stage)) {
-        map[dateStr].push({ evt: evt, stage: stage });
-    }
-}
-
-// Update Summary Widgets
-function updatePaymentSummaryWidgets() {
-    let woCreatedSum = 0;
-    let woCount = 0;
-    let procSum = 0;
-    let procCount = 0;
-    let clearedUsdSum = 0;
-    let clearedIdrSum = 0;
-    let totalWaitDays = 0;
-    let clearedCount = 0;
-
-    paymentEvents.forEach(evt => {
-        if (evt.status === 'WO_CREATED') {
-            woCreatedSum += evt.amountUsd || 0;
-            woCount++;
-        } else if (evt.status === 'PROCESSING') {
-            procSum += evt.amountUsd || 0;
-            procCount++;
-        } else if (evt.status === 'CLEARED') {
-            clearedUsdSum += evt.amountUsd || 0;
-            clearedIdrSum += evt.amountIdr || 0;
-            clearedCount++;
-
-            // Calculate Turnaround Days (Work End / Stage1 -> Stage3)
-            const startDate = new Date(evt.workPeriodEnd || evt.stage1Date);
-            const endDate = new Date(evt.stage3Date);
-            const diffDays = Math.max(0, Math.round((endDate - startDate) / (1000 * 60 * 60 * 24)));
-            totalWaitDays += diffDays;
-        }
-    });
-
-    const avgWait = clearedCount > 0 ? Math.round(totalWaitDays / clearedCount) : 0;
-
-    const elWoVal = document.getElementById('pay-sum-wo-created');
-    const elWoCount = document.getElementById('pay-sum-wo-count');
-    const elProcVal = document.getElementById('pay-sum-tipalti-proc');
-    const elProcCount = document.getElementById('pay-sum-proc-count');
-    const elClearedUsd = document.getElementById('pay-sum-cleared-usd');
-    const elClearedIdr = document.getElementById('pay-sum-cleared-idr');
-    const elAvgWait = document.getElementById('pay-sum-avg-wait');
-
-    if (elWoVal) elWoVal.textContent = `$${woCreatedSum.toFixed(2)}`;
-    if (elWoCount) elWoCount.textContent = `${woCount} Work Orders`;
-    if (elProcVal) elProcVal.textContent = `$${procSum.toFixed(2)}`;
-    if (elProcCount) elProcCount.textContent = `${procCount} Payments`;
-    if (elClearedUsd) elClearedUsd.textContent = `$${clearedUsdSum.toFixed(2)}`;
-    if (elClearedIdr) elClearedIdr.textContent = `Rp ${new Intl.NumberFormat('id-ID').format(clearedIdrSum)}`;
-    if (elAvgWait) elAvgWait.textContent = `${avgWait} Days`;
-}
-
-// Open Payment Event Detail Modal
-function openPaymentEventDetail(eventId) {
-    const evt = paymentEvents.find(p => p.id === eventId);
-    if (!evt) return;
-
-    const modal = document.getElementById('payment-modal');
-    const body = document.getElementById('pay-modal-body');
-    if (!modal || !body) return;
-
-    let periodHtml = 'N/A';
-    if (evt.workPeriodStart && evt.workPeriodEnd) {
-        periodHtml = `<strong style="color: var(--mango-primary);">${evt.workPeriodStart} to ${evt.workPeriodEnd}</strong>`;
-    }
-
-    let idrText = evt.amountIdr > 0 ? ` (Rp ${new Intl.NumberFormat('id-ID').format(evt.amountIdr)})` : '';
-
-    body.innerHTML = `
-        <div style="background: rgba(0,0,0,0.2); border: 1px solid var(--card-border); padding: 0.85rem; border-radius: 12px;">
-            <div style="font-size: 0.75rem; color: var(--text-muted);">Document / WO No:</div>
-            <div style="font-size: 1.1rem; font-weight: 700; color: #fff;">${evt.docNo || evt.woKey}</div>
-            ${evt.projectName ? `<div style="font-size: 0.78rem; color: var(--mango-hover); margin-top: 0.2rem;">Project: ${evt.projectName}</div>` : ''}
-        </div>
-
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
-            <div style="background: rgba(0,0,0,0.2); border: 1px solid var(--card-border); padding: 0.75rem; border-radius: 10px;">
-                <div style="font-size: 0.72rem; color: var(--text-muted);">Amount USD</div>
-                <div style="font-size: 1.1rem; font-weight: 700; color: var(--success);">$${evt.amountUsd.toFixed(2)}</div>
-            </div>
-            <div style="background: rgba(0,0,0,0.2); border: 1px solid var(--card-border); padding: 0.75rem; border-radius: 10px;">
-                <div style="font-size: 0.72rem; color: var(--text-muted);">Status</div>
-                <div style="font-size: 0.95rem; font-weight: 700; color: var(--accent-teal);">${evt.status}</div>
-            </div>
-        </div>
-
-        <div style="background: rgba(255,255,255,0.03); border: 1px dashed var(--card-border); padding: 0.75rem; border-radius: 10px; font-size: 0.8rem; display: flex; flex-direction: column; gap: 0.35rem;">
-            <div>🗓️ <strong>Work Period:</strong> ${periodHtml}</div>
-            <div>🔵 <strong>WO Created:</strong> ${evt.stage1Date || 'Pending'}</div>
-            <div>🟡 <strong>Tipalti Submitted:</strong> ${evt.stage2Date || 'Pending'}</div>
-            <div>🟢 <strong>Payment Cleared:</strong> ${evt.stage3Date || 'Pending'}${idrText}</div>
-        </div>
-    `;
-
-    modal.classList.add('active');
-}
-

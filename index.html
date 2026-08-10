@@ -11,8 +11,6 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="Multimango">
-    <!-- Google Identity Services for Gmail API -->
-    <script src="https://accounts.google.com/gsi/client" async defer></script>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -32,371 +30,273 @@
             </div>
         </header>
 
-        <!-- VIEW MODE NAVIGATION TABS -->
-        <nav class="view-tabs">
-            <button id="tab-shift-tracker" class="view-tab-btn active">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                Shift Tracker
-            </button>
-            <button id="tab-payment-calendar" class="view-tab-btn">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-                Payment Calendar
-            </button>
-        </nav>
 
-        <!-- VIEW 1: SHIFT TRACKER CONTAINER -->
-        <div id="view-shift-tracker" class="view-content active">
-            <!-- DASHBOARD GRID -->
-            <main class="dashboard-grid">
-                
-                <!-- PANEL 1: SHIFT CONTROL -->
-                <section class="card shift-card">
-                    <h2 class="card-title">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                        Shift Management
-                    </h2>
-                    <div class="shift-controls">
-                        <!-- Row 1: Date on Left, Empty Spacer on Right -->
-                        <div class="input-group shift-date-group">
-                            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-                                <label for="shift-date">Shift Date</label>
-                                <button type="button" class="btn-text-link" id="btn-date-today">Set Today</button>
-                            </div>
-                            <input type="date" id="shift-date">
+        <!-- DASHBOARD GRID -->
+        <main class="dashboard-grid">
+            
+            <!-- PANEL 1: SHIFT CONTROL -->
+            <section class="card shift-card">
+                <h2 class="card-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                    Shift Management
+                </h2>
+                <div class="shift-controls">
+                    <!-- Row 1: Date on Left, Empty Spacer on Right -->
+                    <div class="input-group shift-date-group">
+                        <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                            <label for="shift-date">Shift Date</label>
+                            <button type="button" class="btn-text-link" id="btn-date-today">Set Today</button>
                         </div>
-                        <div class="shift-spacer"></div>
-                        
-                        <!-- Row 2: Start Time on Left, End Time on Right -->
-                        <div class="input-group">
-                            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-                                <label>Start Time</label>
-                                <button type="button" class="btn-text-link" id="btn-start-now">Set Now</button>
-                            </div>
-                            <div style="display: flex; justify-content: center; gap: 0.5rem; margin-bottom: 0.3rem;">
-                                <button type="button" class="btn-preset-capsule" id="btn-start-preset-plus15">+15m</button>
-                                <button type="button" class="btn-preset-capsule" id="btn-start-preset-plus30">+30m</button>
-                                <button type="button" class="btn-preset-capsule" id="btn-start-preset-plus1h">+1h</button>
-                            </div>
-                            <div class="time-stepper" id="shift-start-stepper">
-                                <div class="stepper-col">
-                                    <button class="stepper-btn" id="shift-start-hour-up" tabindex="-1">&#9650;</button>
-                                    <input class="stepper-input" id="shift-start-hour" type="number" min="0" max="23" value="0">
-                                    <button class="stepper-btn" id="shift-start-hour-down" tabindex="-1">&#9660;</button>
-                                </div>
-                                <span class="stepper-colon">:</span>
-                                <div class="stepper-col">
-                                    <button class="stepper-btn" id="shift-start-min-up" tabindex="-1">&#9650;</button>
-                                    <input class="stepper-input" id="shift-start-min" type="number" min="0" max="59" value="0">
-                                    <button class="stepper-btn" id="shift-start-min-down" tabindex="-1">&#9660;</button>
-                                </div>
-                            </div>
-                            <div style="display: flex; justify-content: center; gap: 0.5rem; margin-top: 0.3rem;">
-                                <button type="button" class="btn-preset-capsule" id="btn-start-preset-minus15">-15m</button>
-                                <button type="button" class="btn-preset-capsule" id="btn-start-preset-minus30">-30m</button>
-                                <button type="button" class="btn-preset-capsule" id="btn-start-preset-minus1h">-1h</button>
-                            </div>
-                        </div>
-
-                        <div class="input-group">
-                            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-                                <label>End Time</label>
-                                <button type="button" class="btn-text-link" id="btn-end-now">Set Now</button>
-                            </div>
-                            <div style="display: flex; justify-content: center; gap: 0.5rem; margin-bottom: 0.3rem;">
-                                <button type="button" class="btn-preset-capsule" id="btn-preset-plus15">+15m</button>
-                                <button type="button" class="btn-preset-capsule" id="btn-preset-plus30">+30m</button>
-                                <button type="button" class="btn-preset-capsule" id="btn-preset-plus1h">+1h</button>
-                            </div>
-                            <div class="time-stepper" id="shift-end-stepper">
-                                <div class="stepper-col">
-                                    <button class="stepper-btn" id="shift-end-hour-up" tabindex="-1">&#9650;</button>
-                                    <input class="stepper-input" id="shift-end-hour" type="number" min="0" max="23" value="0">
-                                    <button class="stepper-btn" id="shift-end-hour-down" tabindex="-1">&#9660;</button>
-                                </div>
-                                <span class="stepper-colon">:</span>
-                                <div class="stepper-col">
-                                    <button class="stepper-btn" id="shift-end-min-up" tabindex="-1">&#9650;</button>
-                                    <input class="stepper-input" id="shift-end-min" type="number" min="0" max="59" value="0">
-                                    <button class="stepper-btn" id="shift-end-min-down" tabindex="-1">&#9660;</button>
-                                </div>
-                            </div>
-                            <div style="display: flex; justify-content: center; gap: 0.5rem; margin-top: 0.3rem;">
-                                <button type="button" class="btn-preset-capsule" id="btn-preset-minus15">-15m</button>
-                                <button type="button" class="btn-preset-capsule" id="btn-preset-minus30">-30m</button>
-                                <button type="button" class="btn-preset-capsule" id="btn-preset-minus1h">-1h</button>
-                            </div>
-                        </div>
-
-                        <!-- Hidden native inputs kept for JS compatibility -->
-                        <input type="time" id="shift-start" style="display:none;">
-                        <input type="time" id="shift-end" style="display:none;">
-
-                        <!-- Row 3: Action Buttons & Shift Status Indicator -->
-                        <div class="shift-status-container">
-                            <div style="display: flex; gap: 0.75rem; margin-bottom: 0.75rem;">
-                                <button id="btn-start-shift" class="btn btn-primary" style="flex: 1;">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-                                    Start Shift
-                                </button>
-                                <button id="btn-end-shift" class="btn btn-danger" style="flex: 1;" disabled>
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="12" height="12"></rect></svg>
-                                    End Shift
-                                </button>
-                            </div>
-                            <button type="button" id="btn-add-manual-log" class="btn btn-secondary" style="width: 100%; margin-bottom: 0.75rem; border-color: rgba(255,122,0,0.3); color: var(--mango-primary);" title="Directly save a completed shift log for any selected date">
-                                ➕ Save Completed Shift Log (Past / Manual Date)
-                            </button>
-                            
-                            <div class="shift-status-box">
-                                <span class="shift-status-label" id="shift-status-text">Shift Inactive</span>
-                                <div style="display: flex; align-items: center; gap: 0.75rem;">
-                                    <span class="shift-duration-timer" id="shift-duration-timer">00:00:00</span>
-                                    <span class="shift-time-left" id="shift-time-left" style="display:none;">Sisa Waktu: 00:00:00</span>
-                                </div>
-                            </div>
-                            <div id="daily-limit-warning" class="daily-limit-warning" style="display: none;">
-                                ⚠️ Caution: Planned cumulative hours for this date exceed 10 hours daily limit!
-                            </div>
-                        </div>
+                        <input type="date" id="shift-date">
                     </div>
-                </section>
-
-                <!-- PANEL 2: TASK COUNTER -->
-                <section class="card counter-card">
-                    <h2 class="card-title">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
-                        Task Counter
-                    </h2>
+                    <div class="shift-spacer"></div>
                     
-                    <div class="counter-display-wrapper">
-                        <div class="counter-display" id="counter-display">0</div>
-                        <div class="counter-label">Tasks Completed This Shift</div>
+                    <!-- Row 2: Start Time on Left, End Time on Right -->
+                    <div class="input-group">
+                        <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                            <label>Start Time</label>
+                            <button type="button" class="btn-text-link" id="btn-start-now">Set Now</button>
+                        </div>
+                        <div style="display: flex; justify-content: center; gap: 0.5rem; margin-bottom: 0.3rem;">
+                            <button type="button" class="btn-preset-capsule" id="btn-start-preset-plus15">+15m</button>
+                            <button type="button" class="btn-preset-capsule" id="btn-start-preset-plus30">+30m</button>
+                            <button type="button" class="btn-preset-capsule" id="btn-start-preset-plus1h">+1h</button>
+                        </div>
+                        <div class="time-stepper" id="shift-start-stepper">
+                            <div class="stepper-col">
+                                <button class="stepper-btn" id="shift-start-hour-up" tabindex="-1">&#9650;</button>
+                                <input class="stepper-input" id="shift-start-hour" type="number" min="0" max="23" value="0">
+                                <button class="stepper-btn" id="shift-start-hour-down" tabindex="-1">&#9660;</button>
+                            </div>
+                            <div class="stepper-sep">:</div>
+                            <div class="stepper-col">
+                                <button class="stepper-btn" id="shift-start-min-up" tabindex="-1">&#9650;</button>
+                                <input class="stepper-input" id="shift-start-min" type="number" min="0" max="59" value="0">
+                                <button class="stepper-btn" id="shift-start-min-down" tabindex="-1">&#9660;</button>
+                            </div>
+                        </div>
+                        <div style="display: flex; justify-content: center; gap: 0.5rem; margin-top: 0.3rem;">
+                            <button type="button" class="btn-preset-capsule" id="btn-start-preset-minus15">-15m</button>
+                            <button type="button" class="btn-preset-capsule" id="btn-start-preset-minus30">-30m</button>
+                            <button type="button" class="btn-preset-capsule" id="btn-start-preset-minus1h">-1h</button>
+                        </div>
+                    </div>
+                    <div class="input-group">
+                        <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                            <label>End Time</label>
+                            <button type="button" class="btn-text-link" id="btn-end-now">Set Now</button>
+                        </div>
+                        <div style="display: flex; justify-content: center; gap: 0.5rem; margin-bottom: 0.3rem;">
+                            <button type="button" class="btn-preset-capsule" id="btn-preset-plus15">+15m</button>
+                            <button type="button" class="btn-preset-capsule" id="btn-preset-plus30">+30m</button>
+                            <button type="button" class="btn-preset-capsule" id="btn-preset-plus1h">+1h</button>
+                        </div>
+                        <div class="time-stepper" id="shift-end-stepper">
+                            <div class="stepper-col">
+                                <button class="stepper-btn" id="shift-end-hour-up" tabindex="-1">&#9650;</button>
+                                <input class="stepper-input" id="shift-end-hour" type="number" min="0" max="23" value="0">
+                                <button class="stepper-btn" id="shift-end-hour-down" tabindex="-1">&#9660;</button>
+                            </div>
+                            <div class="stepper-sep">:</div>
+                            <div class="stepper-col">
+                                <button class="stepper-btn" id="shift-end-min-up" tabindex="-1">&#9650;</button>
+                                <input class="stepper-input" id="shift-end-min" type="number" min="0" max="59" value="0">
+                                <button class="stepper-btn" id="shift-end-min-down" tabindex="-1">&#9660;</button>
+                            </div>
+                        </div>
+                        <div style="display: flex; justify-content: center; gap: 0.5rem; margin-top: 0.3rem;">
+                            <button type="button" class="btn-preset-capsule" id="btn-preset-minus15">-15m</button>
+                            <button type="button" class="btn-preset-capsule" id="btn-preset-minus30">-30m</button>
+                            <button type="button" class="btn-preset-capsule" id="btn-preset-minus1h">-1h</button>
+                        </div>
+                        <div id="end-time-limit-warning" style="display: none; text-align: center; color: var(--danger); font-size: 0.72rem; font-weight: 600; margin-top: 0.4rem; text-shadow: 0 0 8px rgba(239, 68, 68, 0.25);">
+                            ⚠️ Plan exceeds 10h daily limit
+                        </div>
                     </div>
 
-                    <button id="btn-increment" class="btn btn-increment">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                        Add Task
+                    <!-- Row 3: Start Button on Left, End Button on Right -->
+                    <button id="btn-start-shift" class="btn btn-primary">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                        Start Shift
+                    </button>
+                    <button id="btn-end-shift" class="btn btn-danger" disabled style="opacity: 0.5; cursor: not-allowed;">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>
+                        End Shift
                     </button>
 
-                    <!-- Real-Time Counter Audit Log -->
-                    <div class="counter-history-container">
-                        <div class="history-title-bar">
-                            <span>Incremental Log History</span>
-                            <button id="btn-undo-task" class="btn-undo" title="Undo Last Task Entry">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>
-                                Undo (+1)
-                            </button>
-                        </div>
-                        <div class="counter-audit-log" id="counter-audit-log">
-                            <div class="audit-empty">No active shift.</div>
-                        </div>
-                    </div>
-                </section>
-            </main>
-
-            <!-- BOTTOM SECTION: LOGS & SUMMARY -->
-            <section class="logs-section">
-                <!-- USEFUL LINKS BAR -->
-                <div class="useful-links-bar">
-                    <span class="links-title">Useful Links:</span>
-                    <a href="https://docs.google.com/forms/d/e/1FAIpQLSfgJryGmoo4V94yhScUfVHWRCNxVHH9dmPtpKpn2_FVwx7-LA/viewform" target="_blank" class="useful-link">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
-                        Track Payment Progress
-                    </a>
-                    <a href="https://docs.google.com/forms/d/e/1FAIpQLSeCZe3SDh8Ll-b9u45DKw7k-iSXIFZFWizmOKoAAxhbt8DqAA/viewform" target="_blank" class="useful-link">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
-                        Submit Timesheet Report
-                    </a>
-                    <div style="margin-left: auto; display: flex; align-items: center; gap: 1rem;">
-                        <span id="rate-exchange-info" style="font-size: 0.76rem; color: var(--text-muted); font-weight: 500; display: inline-flex; align-items: center; gap: 0.25rem;">Rate: $1 = Rp --.---</span>
-                        <span style="font-size: 0.76rem; opacity: 0.25;">|</span>
-                        <span id="cloud-sync-status" style="font-size: 0.76rem; color: var(--text-muted); font-weight: 500; display: inline-flex; align-items: center; gap: 0.25rem;">● Cloud: Offline</span>
-                    </div>
-                </div>
-
-                <!-- FILTERS BAR (MINIMALIST & ABOVE STATS) -->
-                <div class="filters-bar-mini">
-                    <div class="filters-mini-left">
-                        <div class="filter-mini-item">
-                            <label for="filter-start-date">From:</label>
-                            <input type="date" id="filter-start-date">
-                        </div>
-                        <div class="filter-mini-item">
-                            <label for="filter-end-date">To:</label>
-                            <input type="date" id="filter-end-date">
-                        </div>
-                        <button id="btn-reset-filters" class="btn-mini" title="Reset date filter to Today">
-                            Today
-                        </button>
-                        <button id="btn-clear-filters" class="btn-mini" title="Show All History">
-                            Show All
-                        </button>
-                        
-                        <!-- Dropdown More -->
-                        <div class="dropdown-container">
-                            <button type="button" class="btn-mini" id="btn-more-trigger">
-                                More ▼
-                            </button>
-                            <div class="dropdown-content">
-                                <button type="button" id="btn-export-csv" class="dropdown-item-btn">
-                                    📊 Export CSV
-                                </button>
-                                <button type="button" id="btn-export-json" class="dropdown-item-btn">
-                                    💾 Backup JSON
-                                </button>
-                                <label for="import-file" class="dropdown-item-btn" style="margin: 0;">
-                                    📥 Import JSON
-                                </label>
-                                <input type="file" id="import-file" accept=".json" style="display: none;">
-                                <button type="button" id="btn-sync-phone" class="dropdown-item-btn">
-                                    📱 Sync Phone (QR)
-                                </button>
-                                <button type="button" id="btn-open-batch-modal" class="dropdown-item-btn" style="color: var(--mango-primary); font-weight: 600;">
-                                    ⚡ Batch Add / Recover Logs
-                                </button>
-                                <button type="button" id="btn-force-restore-cloud" class="dropdown-item-btn">
-                                    🔄 Restore All Firebase Backup
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- DYNAMIC STATS BAR (CONNECTED TO PERIOD FILTER) -->
-                <div class="stats-bar">
-                    <div class="stat-bar-item">
-                        <span class="stat-bar-label">Total Tasks</span>
-                        <span class="stat-bar-value" id="stat-total-tasks">0</span>
-                    </div>
-                    <div class="stat-bar-divider"></div>
-                    <div class="stat-bar-item">
-                        <span class="stat-bar-label">Total Worked Time</span>
-                        <span class="stat-bar-value" id="stat-total-hours">0.00 hrs</span>
-                    </div>
-                    <div class="stat-bar-divider"></div>
-                    <div class="stat-bar-item">
-                        <span class="stat-bar-label">Avg Speed (Rate)</span>
-                        <span class="stat-bar-value" id="stat-avg-rate">0.00 / hr</span>
-                    </div>
-                    <div class="stat-bar-divider"></div>
-                    <div class="stat-bar-item">
-                        <span class="stat-bar-label">Total Payment ($5/hr)</span>
-                        <div style="display: flex; flex-direction: column; align-items: flex-start;">
-                            <span class="stat-bar-value stat-payment-idr" id="stat-total-payment-idr">Rp 0</span>
-                            <span class="stat-payment-usd" id="stat-total-payment-usd">($0.00)</span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- HISTORY LOGS TABLE -->
-                <div class="table-container">
-                    <table class="history-table">
-                        <thead>
-                            <tr>
-                                <th class="col-expand"></th>
-                                <th class="col-date">Date</th>
-                                <th class="col-shifts">Shifts / Time Range</th>
-                                <th class="col-duration">Total Hours</th>
-                                <th class="col-tasks">Tasks</th>
-                                <th class="col-rate">Avg Rate</th>
-                                <th class="col-payment">Daily Payment</th>
-                                <th class="col-action">Action</th>
-                            </tr>
-                        </thead>
-                        <tbody id="logs-tbody">
-                            <!-- Populated dynamically via app.js -->
-                        </tbody>
-                    </table>
-                    <div class="empty-state" id="empty-state" style="display: none;">
-                        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 48px; height: 48px; opacity: 0.3; margin-bottom: 0.5rem;">
-                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                            <line x1="16" y1="2" x2="16" y2="6"></line>
-                            <line x1="8" y1="2" x2="8" y2="6"></line>
-                            <line x1="3" y1="10" x2="21" y2="10"></line>
-                        </svg>
-                        <div style="font-size: 0.88rem; color: var(--text-muted);">No shift reports logged yet. Start a shift above or adjust your filter.</div>
+                    <!-- Row 4: Full width status container -->
+                    <div class="shift-status-container">
+                        <div class="shift-status-label" id="shift-status-text">Shift Inactive</div>
+                        <div class="shift-timer" id="shift-duration-timer">00:00:00</div>
+                        <div class="shift-time-left" id="shift-time-left" style="display: none;">Sisa Waktu: 00:00:00</div>
                     </div>
                 </div>
             </section>
-        </div>
 
-        <!-- VIEW 2: PAYMENT CALENDAR CONTAINER -->
-        <div id="view-payment-calendar" class="view-content">
-            <!-- GMAIL AUTH & SYNC BAR -->
-            <div class="gmail-sync-bar">
-                <div class="gmail-status-group">
-                    <button id="btn-connect-gmail" class="btn btn-gmail">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
-                        <span id="gmail-btn-text">Connect Gmail Auto-Sync</span>
+            <!-- PANEL 2: TASK COUNTER -->
+            <section class="card counter-card" style="display: flex; flex-direction: column; justify-content: space-between;">
+                <h2 class="card-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="9" y1="15" x2="15" y2="15"></line><line x1="12" y1="12" x2="12" y2="18"></line></svg>
+                    Task Counter
+                </h2>
+                
+                <div class="counter-wrapper">
+                    <div class="counter-value" id="counter-display">0</div>
+                    
+                    <div class="counter-buttons">
+                        <button id="btn-minus-task" class="btn-counter btn-minus" title="Press Minus Key">-</button>
+                        <button id="btn-plus-task" class="btn-counter btn-plus" title="Press Space or Plus Key">+</button>
+                    </div>
+                    
+                    <div class="counter-audit-container" style="width: 100%; margin-top: 1rem;">
+                        <div style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted); margin-bottom: 0.4rem; text-align: left; text-transform: uppercase; letter-spacing: 0.05em;">Shift Audit Log</div>
+                        <div class="counter-audit-log" id="counter-audit-log">
+                            <div class="audit-empty">No activity logged yet.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="keyboard-shortcuts-hint">
+                    <span><kbd class="key-badge">Space</kbd> / <kbd class="key-badge">+</kbd> / <kbd class="key-badge">↑</kbd> Add</span>
+                    <span><kbd class="key-badge">-</kbd> / <kbd class="key-badge">↓</kbd> Subtract</span>
+                </div>
+            </section>
+
+
+        </main>
+
+        <!-- BOTTOM PANEL: HISTORICAL LOGS -->
+        <section class="logs-section">
+            
+            <!-- USEFUL LINKS BAR -->
+            <div class="useful-links-bar">
+                <span class="links-title">Useful Links:</span>
+                <a href="https://docs.google.com/forms/d/e/1FAIpQLSfgJryGmoo4V94yhScUfVHWRCNxVHH9dmPtpKpn2_FVwx7-LA/viewform" target="_blank" class="useful-link">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                    Track Payment Progress
+                </a>
+                <a href="https://docs.google.com/forms/d/e/1FAIpQLSeCZe3SDh8Ll-b9u45DKw7k-iSXIFZFWizmOKoAAxhbt8DqAA/viewform" target="_blank" class="useful-link">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                    Submit Timesheet Report
+                </a>
+                <div style="margin-left: auto; display: flex; align-items: center; gap: 1rem;">
+                    <span id="rate-exchange-info" style="font-size: 0.76rem; color: var(--text-muted); font-weight: 500; display: inline-flex; align-items: center; gap: 0.25rem;">Rate: $1 = Rp --.---</span>
+                    <span style="font-size: 0.76rem; opacity: 0.25;">|</span>
+                    <span id="cloud-sync-status" style="font-size: 0.76rem; color: var(--text-muted); font-weight: 500; display: inline-flex; align-items: center; gap: 0.25rem;">● Cloud: Offline</span>
+                </div>
+            </div>
+
+            <!-- FILTERS BAR (MINIMALIST & ABOVE STATS) -->
+            <div class="filters-bar-mini">
+                <div class="filters-mini-left">
+                    <div class="filter-mini-item">
+                        <label for="filter-start-date">From:</label>
+                        <input type="date" id="filter-start-date">
+                    </div>
+                    <div class="filter-mini-item">
+                        <label for="filter-end-date">To:</label>
+                        <input type="date" id="filter-end-date">
+                    </div>
+                    <button id="btn-reset-filters" class="btn-mini" title="Reset date filter to Today">
+                        Today
                     </button>
-                    <span id="gmail-sync-status" class="gmail-status-badge">● Gmail: Not Connected</span>
-                </div>
-                <div class="security-badge" title="Protected by Firebase Secret Key device token">
-                    🔒 Protected Device Session
-                </div>
-            </div>
-
-            <!-- PAYMENT SUMMARY WIDGETS -->
-            <div class="payment-summary-grid">
-                <div class="pay-summary-card">
-                    <div class="pay-summary-label">📄 WO Created (Pending)</div>
-                    <div class="pay-summary-val" id="pay-sum-wo-created">$0.00</div>
-                    <div class="pay-summary-sub" id="pay-sum-wo-count">0 Work Orders</div>
-                </div>
-                <div class="pay-summary-card">
-                    <div class="pay-summary-label">⏳ Processing in Tipalti</div>
-                    <div class="pay-summary-val" id="pay-sum-tipalti-proc">$0.00</div>
-                    <div class="pay-summary-sub" id="pay-sum-proc-count">0 Payments</div>
-                </div>
-                <div class="pay-summary-card cleared">
-                    <div class="pay-summary-label">💰 Cleared This Month</div>
-                    <div class="pay-summary-val" id="pay-sum-cleared-usd">$0.00</div>
-                    <div class="pay-summary-sub-idr" id="pay-sum-cleared-idr">Rp 0</div>
-                </div>
-                <div class="pay-summary-card">
-                    <div class="pay-summary-label">⏱️ Avg Payout Wait Time</div>
-                    <div class="pay-summary-val" id="pay-sum-avg-wait">0 Days</div>
-                    <div class="pay-summary-sub">Work End → Money Cleared</div>
-                </div>
-            </div>
-
-            <!-- CALENDAR HEADER CONTROLS -->
-            <div class="calendar-controls-bar">
-                <div class="calendar-month-nav">
-                    <button id="btn-cal-prev-month" class="btn-cal-nav">&lt;</button>
-                    <h2 id="cal-month-year-title">August 2026</h2>
-                    <button id="btn-cal-next-month" class="btn-cal-nav">&gt;</button>
-                </div>
-                <div class="calendar-legend">
-                    <span class="legend-chip chip-blue">🔵 WO Created</span>
-                    <span class="legend-chip chip-yellow">🟡 Tipalti Submitted</span>
-                    <span class="legend-chip chip-green">🟢 Payment Cleared</span>
+                    <button id="btn-clear-filters" class="btn-mini" title="Show All History">
+                        Show All
+                    </button>
+                    
+                    <!-- Dropdown More -->
+                    <div class="dropdown-container">
+                        <button type="button" class="btn-mini" id="btn-more-trigger">
+                            More ▼
+                        </button>
+                        <div class="dropdown-content">
+                            <button type="button" id="btn-export-csv" class="dropdown-item-btn">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 4px; opacity: 0.8;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                                Export CSV
+                            </button>
+                            <button type="button" id="btn-export-json" class="dropdown-item-btn">
+                                Backup (JSON)
+                            </button>
+                            <button type="button" id="btn-import-json" class="dropdown-item-btn">
+                                Import (JSON)
+                            </button>
+                            <button type="button" id="btn-sync-phone" class="dropdown-item-btn">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 4px; opacity: 0.8;"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
+                                Sync Phone (QR)
+                            </button>
+                        </div>
+                    </div>
+                    <input type="file" id="file-import-input" accept=".json" style="display: none;">
                 </div>
             </div>
 
-            <!-- CALENDAR MONTH GRID -->
-            <div class="calendar-container">
-                <div class="calendar-days-header">
-                    <div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div><div>Sun</div>
+            <!-- STATS BAR (PERIODE FILTERED) -->
+            <section class="stats-bar">
+                <div class="stat-bar-item">
+                    <span class="stat-bar-label">Tasks Finished</span>
+                    <span class="stat-bar-value highlight-mango" id="stat-total-tasks">0</span>
                 </div>
-                <div class="calendar-grid" id="calendar-grid">
-                    <!-- Populated dynamically via app.js -->
+                <div class="stat-bar-divider"></div>
+                <div class="stat-bar-item">
+                    <span class="stat-bar-label">Total Time Worked</span>
+                    <span class="stat-bar-value highlight-teal" id="stat-total-hours">0.0 hrs</span>
+                </div>
+                <div class="stat-bar-divider"></div>
+                <div class="stat-bar-item">
+                    <span class="stat-bar-label">Average Productivity Rate</span>
+                    <span class="stat-bar-value" id="stat-avg-rate">0.00 tasks/hr</span>
+                </div>
+                <div class="stat-bar-divider"></div>
+                <div class="stat-bar-item">
+                    <span class="stat-bar-label">Total Payment ($5/hr)</span>
+                    <span class="stat-bar-value highlight-mango" id="stat-total-payment">$0.00</span>
+                </div>
+            </section>
+
+            <!-- CUMULATIVE DAILY LOG TABLE -->
+            <div class="table-container">
+                <table class="history-table" id="logs-table">
+                    <thead>
+                        <tr>
+                            <th class="col-expand" style="width: 24px;"></th>
+                            <th class="col-date">Date</th>
+                            <th class="col-shifts">Time / Shifts</th>
+                            <th class="col-duration">Hours</th>
+                            <th class="col-tasks">Tasks</th>
+                            <th class="col-rate">Rate</th>
+                            <th class="col-payment">Payment</th>
+                            <th class="col-action" style="text-align: right;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logs-tbody">
+                        <!-- Grouped by Date dynamically via JavaScript -->
+                    </tbody>
+                </table>
+                <div class="empty-state" id="empty-state" style="display: none;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                        <line x1="16" y1="2" x2="16" y2="6"></line>
+                        <line x1="8" y1="2" x2="8" y2="6"></line>
+                        <line x1="3" y1="10" x2="21" y2="10"></line>
+                    </svg>
+                    <div>No shift reports logged yet. Start a shift above or adjust your filter.</div>
                 </div>
             </div>
-        </div>
+        </section>
     </div>
 
-    <!-- EDIT SHIFT LOG MODAL -->
-    <div id="edit-modal" class="modal-overlay">
+    <!-- EDIT LOG MODAL -->
+    <div class="modal-overlay" id="edit-modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h3>Edit Shift Entry</h3>
+                <h3>Edit Shift Report</h3>
                 <button class="close-modal" id="btn-close-modal">&times;</button>
             </div>
-            <div class="modal-body" style="display: flex; flex-direction: column; gap: 1rem;">
+            <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+                <input type="hidden" id="edit-index">
                 <div class="input-group">
                     <label for="edit-date">Shift Date</label>
-                    <input type="date" id="edit-date" style="background: rgba(255,255,255,0.03); border: 1px solid var(--card-border); color: white; padding: 0.75rem 1rem; border-radius: 10px; font-family: inherit; font-size: 1rem;">
+                    <input type="date" id="edit-date">
                 </div>
                 <div class="input-row">
                     <div class="input-group">
@@ -404,13 +304,13 @@
                         <div class="time-stepper" id="edit-start-stepper">
                             <div class="stepper-col">
                                 <button class="stepper-btn" id="edit-start-hour-up" tabindex="-1">&#9650;</button>
-                                <input class="stepper-input" id="edit-start-hour" type="number" min="0" max="23">
+                                <input class="stepper-input" id="edit-start-hour" type="number" min="0" max="23" value="0">
                                 <button class="stepper-btn" id="edit-start-hour-down" tabindex="-1">&#9660;</button>
                             </div>
-                            <span class="stepper-colon">:</span>
+                            <div class="stepper-sep">:</div>
                             <div class="stepper-col">
                                 <button class="stepper-btn" id="edit-start-min-up" tabindex="-1">&#9650;</button>
-                                <input class="stepper-input" id="edit-start-min" type="number" min="0" max="59">
+                                <input class="stepper-input" id="edit-start-min" type="number" min="0" max="59" value="0">
                                 <button class="stepper-btn" id="edit-start-min-down" tabindex="-1">&#9660;</button>
                             </div>
                         </div>
@@ -420,13 +320,13 @@
                         <div class="time-stepper" id="edit-end-stepper">
                             <div class="stepper-col">
                                 <button class="stepper-btn" id="edit-end-hour-up" tabindex="-1">&#9650;</button>
-                                <input class="stepper-input" id="edit-end-hour" type="number" min="0" max="23">
+                                <input class="stepper-input" id="edit-end-hour" type="number" min="0" max="23" value="0">
                                 <button class="stepper-btn" id="edit-end-hour-down" tabindex="-1">&#9660;</button>
                             </div>
-                            <span class="stepper-colon">:</span>
+                            <div class="stepper-sep">:</div>
                             <div class="stepper-col">
                                 <button class="stepper-btn" id="edit-end-min-up" tabindex="-1">&#9650;</button>
-                                <input class="stepper-input" id="edit-end-min" type="number" min="0" max="59">
+                                <input class="stepper-input" id="edit-end-min" type="number" min="0" max="59" value="0">
                                 <button class="stepper-btn" id="edit-end-min-down" tabindex="-1">&#9660;</button>
                             </div>
                         </div>
@@ -440,19 +340,6 @@
                     <button id="btn-cancel-edit" class="btn btn-secondary">Cancel</button>
                     <button id="btn-save-edit" class="btn btn-primary">Save Changes</button>
                 </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- PAYMENT EVENT DETAIL MODAL -->
-    <div id="payment-modal" class="modal-overlay">
-        <div class="modal-content" style="max-width: 480px;">
-            <div class="modal-header">
-                <h3 id="pay-modal-title">Payment Event Detail</h3>
-                <button class="close-modal" id="btn-close-pay-modal">&times;</button>
-            </div>
-            <div class="modal-body" id="pay-modal-body" style="display: flex; flex-direction: column; gap: 1rem;">
-                <!-- Populated dynamically via app.js -->
             </div>
         </div>
     </div>
@@ -475,29 +362,6 @@
                 <button type="button" id="btn-copy-qr-link" class="btn btn-secondary" style="font-size: 0.78rem; padding: 0.4rem 0.8rem; width: 100%;">
                     📋 Copy Link for Phone Browser
                 </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- BATCH PASTE QUICK ADD MODAL -->
-    <div id="batch-modal" class="modal-overlay">
-        <div class="modal-content" style="max-width: 500px;">
-            <div class="modal-header">
-                <h3>⚡ Quick Batch Add / Recover Logs</h3>
-                <button class="close-modal" id="btn-close-batch-modal">&times;</button>
-            </div>
-            <div class="modal-body" style="display: flex; flex-direction: column; gap: 1rem;">
-                <p style="font-size: 0.82rem; color: var(--text-muted); line-height: 1.45; margin: 0;">
-                    Paste or type your shift logs line-by-line in format: <code>YYYY-MM-DD StartTime-EndTime Tasks</code><br>
-                    Example:<br>
-                    <code>2026-08-02 09:00-17:00 4</code><br>
-                    <code>2026-08-03 10:00-15:00 3</code>
-                </p>
-                <textarea id="batch-text-input" rows="6" style="background: rgba(255,255,255,0.03); border: 1px solid var(--card-border); color: white; padding: 0.75rem; border-radius: 10px; font-family: 'JetBrains Mono', monospace; font-size: 0.85rem;" placeholder="2026-08-02 09:00-17:00 4&#10;2026-08-03 10:00-15:00 3&#10;2026-08-04 14:00-18:00 2"></textarea>
-                <div class="modal-actions">
-                    <button type="button" id="btn-cancel-batch" class="btn btn-secondary">Cancel</button>
-                    <button type="button" id="btn-submit-batch" class="btn btn-primary">Add All Shifts to History</button>
-                </div>
             </div>
         </div>
     </div>

@@ -1645,10 +1645,14 @@ function initPaymentCalendar() {
         try {
             const parsed = JSON.parse(savedPayments);
             if (Array.isArray(parsed) && parsed.length > 0) {
-                paymentEvents = deduplicatePaymentEvents([...DEFAULT_PAYMENT_EVENTS, ...parsed]);
+                // Filter out any stale $10 test entries
+                const cleanParsed = parsed.filter(p => p.amount && p.amount !== 10 && p.amount > 20);
+                paymentEvents = deduplicatePaymentEvents([...DEFAULT_PAYMENT_EVENTS, ...cleanParsed]);
             }
         } catch(e) {}
     }
+    // Filter paymentEvents to remove any $10 test item
+    paymentEvents = paymentEvents.filter(p => p.amount && p.amount !== 10 && p.amount > 20);
     localStorage.setItem('multimango_payments', JSON.stringify(paymentEvents));
 
     const tabShift = document.getElementById('tab-shift-tracker');
@@ -1769,46 +1773,75 @@ async function fetchGmailPayments(accessToken) {
     }
 }
 
+function extractBodyFromGmailMsg(msg) {
+    if (!msg || !msg.payload) return msg.snippet || '';
+    let body = msg.snippet || '';
+    
+    function decodePart(part) {
+        if (part.body && part.body.data) {
+            try {
+                const b64 = part.body.data.replace(/-/g, '+').replace(/_/g, '/');
+                const decoded = decodeURIComponent(escape(window.atob(b64)));
+                body += ' ' + decoded;
+            } catch(e) {}
+        }
+        if (part.parts && Array.isArray(part.parts)) {
+            part.parts.forEach(decodePart);
+        }
+    }
+
+    decodePart(msg.payload);
+    return body;
+}
+
 function parseGmailMessage(msg) {
-    const snippet = msg.snippet || '';
+    const fullText = extractBodyFromGmailMsg(msg);
     const internalDate = parseInt(msg.internalDate) || Date.now();
     const dateStr = new Date(internalDate).toISOString().split('T')[0];
 
-    // Stage 1: RWS Work Order Created
-    if (snippet.includes('Work Order') || snippet.includes('Z342') || snippet.includes('Document No.')) {
-        const docMatch = snippet.match(/Z\d{9,}/) || snippet.match(/Document No\.\s*\(?([A-Z0-9]+)\)?/i);
-        const amountMatch = snippet.match(/\$\s*([\d\.]+)/);
-        const woKey = docMatch ? docMatch[0] : `wo_${dateStr}`;
-        const amount = amountMatch ? parseFloat(amountMatch[1]) : 91.25;
+    // Stage 1: RWS Work Order Created (Extracted directly from HTML/Text body)
+    if (fullText.includes('Work Order') || fullText.includes('Z342') || fullText.includes('Document No.')) {
+        const docMatch = fullText.match(/Z\d{9,}/) || fullText.match(/Document No\.\s*[:\s]*\(?([A-Z0-9]+)\)?/i);
+        const amountMatch = fullText.match(/(?:Total Amount|Total USD|Amount|USD)\s*[:\s]*\$?\s*([\d\.]+)/i) || fullText.match(/\$\s*([\d\.]+)/);
+        
+        if (docMatch || amountMatch) {
+            const woKey = docMatch ? (docMatch[1] || docMatch[0]) : `wo_${dateStr}`;
+            const amount = amountMatch ? parseFloat(amountMatch[1]) : 91.25;
 
-        upsertPaymentEvent({
-            id: woKey,
-            woKey: woKey,
-            date: dateStr,
-            stage: 'wo_created',
-            title: `Work Order Created (${woKey})`,
-            amount: amount,
-            statusText: '🔵 Work Order Created (Pending Tipalti)',
-            details: `Document No: ${woKey}, Amount: $${amount}`
-        });
+            if (amount > 0 && amount !== 10) {
+                upsertPaymentEvent({
+                    id: woKey,
+                    woKey: woKey,
+                    date: dateStr,
+                    stage: 'wo_created',
+                    title: `Work Order Created (${woKey})`,
+                    amount: amount,
+                    statusText: `🔵 Work Order Created (${woKey})`,
+                    details: `Document No: ${woKey} | Amount: $${amount.toFixed(2)}`
+                });
+            }
+        }
     }
 
     // Stage 2 & 3: Tipalti Submitted / Cleared
-    if (snippet.includes('Tipalti') || snippet.includes('payment') || snippet.includes('cleared')) {
-        const amountMatch = snippet.match(/\$\s*([\d\.]+)/) || snippet.match(/USD\s*([\d\.]+)/i);
-        const idrMatch = snippet.match(/Rp\s*([\d\.,]+)/i);
-        const isCleared = snippet.includes('cleared') || snippet.includes('processed') || snippet.includes('paid');
+    if (fullText.includes('Tipalti') || fullText.includes('payment') || fullText.includes('cleared')) {
+        const amountMatch = fullText.match(/(?:Total Amount|Total USD|Amount|USD)\s*[:\s]*\$?\s*([\d\.]+)/i) || fullText.match(/\$\s*([\d\.]+)/);
+        const idrMatch = fullText.match(/Rp\s*([\d\.,]+)/i);
+        const isCleared = fullText.includes('cleared') || fullText.includes('processed') || fullText.includes('paid');
+        const amount = amountMatch ? parseFloat(amountMatch[1]) : 91.25;
 
-        upsertPaymentEvent({
-            id: `tipalti_${dateStr}`,
-            date: dateStr,
-            stage: isCleared ? 'cleared' : 'tipalti_submitted',
-            title: isCleared ? 'Payment Cleared' : 'Tipalti Submitted',
-            amount: amountMatch ? parseFloat(amountMatch[1]) : 91.25,
-            amountIdr: idrMatch ? idrMatch[0] : 'Rp 1.583.237',
-            statusText: isCleared ? '🟢 Payment Cleared (Bank)' : '🟡 Tipalti Submitted',
-            details: isCleared ? `USD: $91.25 | IDR: ${idrMatch ? idrMatch[0] : 'Rp 1.583.237'}` : 'Submitted to Tipalti'
-        });
+        if (amount > 0 && amount !== 10) {
+            upsertPaymentEvent({
+                id: `tipalti_${dateStr}`,
+                date: dateStr,
+                stage: isCleared ? 'cleared' : 'tipalti_submitted',
+                title: isCleared ? 'Payment Cleared' : 'Tipalti Submitted',
+                amount: amount,
+                amountIdr: idrMatch ? idrMatch[0] : 'Rp 1.583.237,00',
+                statusText: isCleared ? '🟢 Payment Cleared (Bank)' : '🟡 Tipalti Submitted',
+                details: isCleared ? `USD: $${amount.toFixed(2)} | IDR: ${idrMatch ? idrMatch[0] : 'Rp 1.583.237,00'}` : 'Submitted to Tipalti'
+            });
+        }
     }
 }
 

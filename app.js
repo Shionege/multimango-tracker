@@ -1704,28 +1704,29 @@ function upsertPaymentEvent(evt) {
 }
 
 function getCleanDeduplicatedPayments() {
-    // Stage priority ranking
-    const rank = { cleared: 3, tipalti_submitted: 2, wo_created: 1 };
-    const groupMap = new Map();
+    // Deduplicate per (stage + amount) so all 3 stages (WO Created, Tipalti Proc, Cleared) REMAIN VISIBLE
+    // while eliminating temporary alias/fallback duplicate badges like SUB_91.25 or wo_2026...
+    const stageAmountMap = new Map();
 
     paymentEvents.forEach(evt => {
-        // Group by WO key if present, or by amount rounded to 2 decimals
-        const key = evt.woKey ? evt.woKey : `amt_${(evt.amount || 0).toFixed(2)}`;
-        if (!groupMap.has(key)) {
-            groupMap.set(key, evt);
+        const amtKey = (evt.amount || 0).toFixed(2);
+        const stageKey = `${evt.stage}_${amtKey}`;
+
+        if (!stageAmountMap.has(stageKey)) {
+            stageAmountMap.set(stageKey, evt);
         } else {
-            const existing = groupMap.get(key);
-            const existingRank = rank[existing.stage] || 0;
-            const currentRank = rank[evt.stage] || 0;
-            
-            // Prefer higher stage rank, or newer date if same rank
-            if (currentRank > existingRank || (currentRank === existingRank && evt.date > existing.date)) {
-                groupMap.set(key, evt);
+            const existing = stageAmountMap.get(stageKey);
+            // Prefer official document numbers (Z342... / PTIP...) over fallback codes (SUB_... / wo_... / tipalti_...)
+            const isExistingOfficial = existing.woKey && (existing.woKey.startsWith('Z342') || existing.woKey.startsWith('PTIP'));
+            const isCurrentOfficial = evt.woKey && (evt.woKey.startsWith('Z342') || evt.woKey.startsWith('PTIP'));
+
+            if (isCurrentOfficial || (!isExistingOfficial && evt.id >= existing.id)) {
+                stageAmountMap.set(stageKey, evt);
             }
         }
     });
 
-    return Array.from(groupMap.values());
+    return Array.from(stageAmountMap.values());
 }
 
 function renderPaymentCalendar() {

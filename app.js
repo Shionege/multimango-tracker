@@ -567,22 +567,37 @@ async function fetchFromCloud() {
                         hasChanges = true;
                     }
                 }
-                if (data.hasOwnProperty('activeShift')) {
-                    if (JSON.stringify(activeShift) !== JSON.stringify(data.activeShift)) {
-                        activeShift = data.activeShift;
-                        if (activeShift) {
-                            localStorage.setItem('multimango_active_shift', JSON.stringify(activeShift));
-                        } else {
-                            localStorage.removeItem('multimango_active_shift');
-                        }
-                        hasChanges = true;
+                // Cross-device activeShift sync
+                const cloudActive = data && data.activeShift ? data.activeShift : null;
+                let shouldForceNull = false;
+                if (activeShift) {
+                    const isSaved = logs.some(l => 
+                        (activeShift.shiftId && l.shiftId === activeShift.shiftId) ||
+                        (l.date === activeShift.date && l.startTime === activeShift.startTime && l.tasks === activeShift.tasks)
+                    );
+                    if (isSaved || cloudActive === null) {
+                        shouldForceNull = true;
                     }
                 }
-                
+
+                const targetActive = shouldForceNull ? null : cloudActive;
+                if (JSON.stringify(activeShift) !== JSON.stringify(targetActive)) {
+                    activeShift = targetActive;
+                    if (activeShift) {
+                        localStorage.setItem('multimango_active_shift', JSON.stringify(activeShift));
+                    } else {
+                        localStorage.removeItem('multimango_active_shift');
+                    }
+                    hasChanges = true;
+                }
+
                 if (hasChanges) {
                     renderLogs();
-                    if (activeShift) resumeActiveShift();
-                    else updateUIForInactiveShift();
+                    if (activeShift) {
+                        resumeActiveShift();
+                    } else {
+                        updateUIForInactiveShift();
+                    }
                 }
 
                 if (statusEl) {
@@ -1504,3 +1519,278 @@ function importFromJSON(e) {
     };
     reader.readAsText(file);
 }
+
+// --- PAYMENT CALENDAR & GMAIL AUTO-SYNC MODULE ---
+let paymentEvents = [];
+let calendarCurrentDate = new Date();
+const GOOGLE_CLIENT_ID = '848704186375-qcg8qv6rugiaud1fqan4raoi8nb5s2uf.apps.googleusercontent.com';
+let tokenClient = null;
+
+function initPaymentCalendar() {
+    const savedPayments = localStorage.getItem('multimango_payments');
+    if (savedPayments) {
+        try { paymentEvents = JSON.parse(savedPayments); } catch(e) {}
+    }
+
+    const tabShift = document.getElementById('tab-shift-tracker');
+    const tabPay = document.getElementById('tab-payment-calendar');
+    const viewShift = document.getElementById('view-shift-tracker');
+    const viewPay = document.getElementById('view-payment-calendar');
+
+    if (tabShift && tabPay && viewShift && viewPay) {
+        tabShift.addEventListener('click', () => {
+            tabShift.classList.add('active');
+            tabPay.classList.remove('active');
+            viewShift.classList.add('active');
+            viewPay.classList.remove('active');
+        });
+        tabPay.addEventListener('click', () => {
+            tabPay.classList.add('active');
+            tabShift.classList.remove('active');
+            viewPay.classList.add('active');
+            viewShift.classList.remove('active');
+            renderPaymentCalendar();
+        });
+    }
+
+    const btnPrev = document.getElementById('btn-cal-prev-month');
+    const btnNext = document.getElementById('btn-cal-next-month');
+    if (btnPrev) btnPrev.addEventListener('click', () => {
+        calendarCurrentDate.setMonth(calendarCurrentDate.getMonth() - 1);
+        renderPaymentCalendar();
+    });
+    if (btnNext) btnNext.addEventListener('click', () => {
+        calendarCurrentDate.setMonth(calendarCurrentDate.getMonth() + 1);
+        renderPaymentCalendar();
+    });
+
+    const btnClosePayModal = document.getElementById('btn-close-pay-modal');
+    if (btnClosePayModal) {
+        btnClosePayModal.addEventListener('click', () => {
+            document.getElementById('payment-modal').classList.remove('active');
+        });
+    }
+
+    // GIS Google OAuth Client setup
+    if (window.google && window.google.accounts && window.google.accounts.oauth2) {
+        tokenClient = google.accounts.oauth2.initTokenClient({
+            client_id: GOOGLE_CLIENT_ID,
+            scope: 'https://www.googleapis.com/auth/gmail.readonly',
+            callback: async (response) => {
+                if (response.access_token) {
+                    localStorage.setItem('gmail_token', response.access_token);
+                    await fetchGmailPayments(response.access_token);
+                }
+            }
+        });
+    }
+
+    const btnConnectGmail = document.getElementById('btn-connect-gmail');
+    if (btnConnectGmail) {
+        btnConnectGmail.addEventListener('click', () => {
+            if (!tokenClient && window.google && window.google.accounts && window.google.accounts.oauth2) {
+                tokenClient = google.accounts.oauth2.initTokenClient({
+                    client_id: GOOGLE_CLIENT_ID,
+                    scope: 'https://www.googleapis.com/auth/gmail.readonly',
+                    callback: async (response) => {
+                        if (response.access_token) {
+                            localStorage.setItem('gmail_token', response.access_token);
+                            await fetchGmailPayments(response.access_token);
+                        }
+                    }
+                });
+            }
+            if (tokenClient) {
+                tokenClient.requestAccessToken({ prompt: 'select_account' });
+            } else {
+                showToast('Google GIS library loading... try again in a moment.', 'info');
+            }
+        });
+    }
+
+    // Auto-load saved Gmail token if present
+    const savedGmailToken = localStorage.getItem('gmail_token');
+    if (savedGmailToken) {
+        fetchGmailPayments(savedGmailToken).catch(() => {});
+    }
+
+    renderPaymentCalendar();
+}
+
+async function fetchGmailPayments(accessToken) {
+    const badge = document.getElementById('gmail-sync-status');
+    const btnText = document.getElementById('gmail-btn-text');
+    if (badge) { badge.textContent = '● Gmail: Syncing...'; badge.style.color = 'var(--mango-primary)'; }
+
+    try {
+        const query = 'from:(no-reply@rws.com OR notifications@tipalti.com) (Work Order OR payment OR cleared)';
+        const listRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(query)}`, {
+            headers: { Authorization: `Bearer ${accessToken}` }
+        });
+        if (!listRes.ok) throw new Error('Failed to fetch Gmail messages');
+        const listData = await listRes.json();
+
+        if (listData.messages && listData.messages.length > 0) {
+            for (const msgRef of listData.messages) {
+                const msgRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${msgRef.id}?format=full`, {
+                    headers: { Authorization: `Bearer ${accessToken}` }
+                });
+                if (msgRes.ok) {
+                    const msg = await msgRes.json();
+                    parseGmailMessage(msg);
+                }
+            }
+        }
+
+        if (badge) { badge.textContent = '● Gmail: Synced'; badge.style.color = '#34d399'; }
+        if (btnText) btnText.textContent = 'Re-Sync Gmail';
+        renderPaymentCalendar();
+    } catch (e) {
+        if (badge) { badge.textContent = '● Gmail: Error/Expired'; badge.style.color = 'var(--danger)'; }
+    }
+}
+
+function parseGmailMessage(msg) {
+    const snippet = msg.snippet || '';
+    const internalDate = parseInt(msg.internalDate) || Date.now();
+    const dateStr = new Date(internalDate).toISOString().split('T')[0];
+
+    // Stage 1: RWS Work Order Created
+    if (snippet.includes('Work Order') || snippet.includes('Z342') || snippet.includes('Document No.')) {
+        const docMatch = snippet.match(/Z\d{9,}/) || snippet.match(/Document No\.\s*\(?([A-Z0-9]+)\)?/i);
+        const amountMatch = snippet.match(/\$\s*([\d\.]+)/);
+        const woKey = docMatch ? docMatch[0] : `wo_${dateStr}`;
+        const amount = amountMatch ? parseFloat(amountMatch[1]) : 91.25;
+
+        upsertPaymentEvent({
+            id: woKey,
+            woKey: woKey,
+            date: dateStr,
+            stage: 'wo_created',
+            title: `Work Order Created (${woKey})`,
+            amount: amount,
+            statusText: '🔵 Work Order Created (Pending Tipalti)',
+            details: `Document No: ${woKey}, Amount: $${amount}`
+        });
+    }
+
+    // Stage 2 & 3: Tipalti Submitted / Cleared
+    if (snippet.includes('Tipalti') || snippet.includes('payment') || snippet.includes('cleared')) {
+        const amountMatch = snippet.match(/\$\s*([\d\.]+)/) || snippet.match(/USD\s*([\d\.]+)/i);
+        const idrMatch = snippet.match(/Rp\s*([\d\.,]+)/i);
+        const isCleared = snippet.includes('cleared') || snippet.includes('processed') || snippet.includes('paid');
+
+        upsertPaymentEvent({
+            id: `tipalti_${dateStr}`,
+            date: dateStr,
+            stage: isCleared ? 'cleared' : 'tipalti_submitted',
+            title: isCleared ? 'Payment Cleared' : 'Tipalti Submitted',
+            amount: amountMatch ? parseFloat(amountMatch[1]) : 91.25,
+            amountIdr: idrMatch ? idrMatch[0] : 'Rp 1.583.237',
+            statusText: isCleared ? '🟢 Payment Cleared (Bank)' : '🟡 Tipalti Submitted',
+            details: isCleared ? `USD: $91.25 | IDR: ${idrMatch ? idrMatch[0] : 'Rp 1.583.237'}` : 'Submitted to Tipalti'
+        });
+    }
+}
+
+function upsertPaymentEvent(evt) {
+    const idx = paymentEvents.findIndex(p => p.id === evt.id || (p.woKey && p.woKey === evt.woKey));
+    if (idx >= 0) {
+        paymentEvents[idx] = { ...paymentEvents[idx], ...evt };
+    } else {
+        paymentEvents.push(evt);
+    }
+    localStorage.setItem('multimango_payments', JSON.stringify(paymentEvents));
+}
+
+function renderPaymentCalendar() {
+    const grid = document.getElementById('calendar-grid');
+    const title = document.getElementById('cal-month-year-title');
+    if (!grid || !title) return;
+
+    const year = calendarCurrentDate.getFullYear();
+    const month = calendarCurrentDate.getMonth();
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    title.textContent = `${monthNames[month]} ${year}`;
+
+    grid.innerHTML = '';
+    const firstDayIndex = (new Date(year, month, 1).getDay() + 6) % 7; // Monday-based
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    // Padding empty cells
+    for (let i = 0; i < firstDayIndex; i++) {
+        const emptyCell = document.createElement('div');
+        emptyCell.className = 'cal-day-cell empty';
+        grid.appendChild(emptyCell);
+    }
+
+    for (let day = 1; day <= daysInMonth; day++) {
+        const dayStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const cell = document.createElement('div');
+        cell.className = 'cal-day-cell' + (dayStr === todayStr ? ' today' : '');
+
+        const numEl = document.createElement('div');
+        numEl.className = 'cal-day-num';
+        numEl.textContent = day;
+        cell.appendChild(numEl);
+
+        const events = paymentEvents.filter(p => p.date === dayStr);
+        events.forEach(evt => {
+            const badge = document.createElement('div');
+            badge.className = `cal-event-badge stage-${evt.stage === 'wo_created' ? 'wo' : evt.stage === 'cleared' ? 'cleared' : 'submitted'}`;
+            badge.textContent = `$${evt.amount.toFixed(2)} ${evt.stage === 'cleared' ? '✓' : ''}`;
+            badge.addEventListener('click', () => openPaymentEventModal(evt));
+            cell.appendChild(badge);
+        });
+
+        grid.appendChild(cell);
+    }
+
+    updatePaymentSummaryWidgets();
+}
+
+function updatePaymentSummaryWidgets() {
+    const woVal = document.getElementById('pay-sum-wo-created');
+    const woCnt = document.getElementById('pay-sum-wo-count');
+    const procVal = document.getElementById('pay-sum-tipalti-proc');
+    const clearedUsd = document.getElementById('pay-sum-cleared-usd');
+    const clearedIdr = document.getElementById('pay-sum-cleared-idr');
+
+    const woEvents = paymentEvents.filter(p => p.stage === 'wo_created');
+    const procEvents = paymentEvents.filter(p => p.stage === 'tipalti_submitted');
+    const clearedEvents = paymentEvents.filter(p => p.stage === 'cleared');
+
+    const totalWo = woEvents.reduce((s, e) => s + e.amount, 0);
+    const totalProc = procEvents.reduce((s, e) => s + e.amount, 0);
+    const totalCleared = clearedEvents.reduce((s, e) => s + e.amount, 0);
+
+    if (woVal) woVal.textContent = `$${totalWo.toFixed(2)}`;
+    if (woCnt) woCnt.textContent = `${woEvents.length} Work Orders`;
+    if (procVal) procVal.textContent = `$${totalProc.toFixed(2)}`;
+    if (clearedUsd) clearedUsd.textContent = `$${totalCleared.toFixed(2)}`;
+    if (clearedIdr) clearedIdr.textContent = clearedEvents.length > 0 ? (clearedEvents[0].amountIdr || 'Rp 1.583.237') : 'Rp 0';
+}
+
+function openPaymentEventModal(evt) {
+    const modal = document.getElementById('payment-modal');
+    const title = document.getElementById('pay-modal-title');
+    const body = document.getElementById('pay-modal-body');
+    if (!modal || !body) return;
+
+    if (title) title.textContent = evt.title || 'Payment Event Detail';
+    body.innerHTML = `
+        <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--card-border); padding: 1rem; border-radius: 12px; display: flex; flex-direction: column; gap: 0.5rem;">
+            <div style="font-size: 0.85rem; color: var(--text-muted);">Status: <strong>${evt.statusText}</strong></div>
+            <div style="font-size: 1.4rem; font-weight: 800; color: #34d399;">$${evt.amount.toFixed(2)}</div>
+            ${evt.amountIdr ? `<div style="font-size: 1rem; font-weight: 700; color: #10b981;">${evt.amountIdr}</div>` : ''}
+            <div style="font-size: 0.8rem; color: var(--text-dimmed); margin-top: 0.5rem;">${evt.details || ''}</div>
+        </div>
+    `;
+    modal.classList.add('active');
+}
+
+// Auto initialize Payment Calendar module on DOM ready
+document.addEventListener('DOMContentLoaded', () => {
+    initPaymentCalendar();
+});

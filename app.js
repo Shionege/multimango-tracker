@@ -13,8 +13,8 @@ const shiftStatusText = document.getElementById('shift-status-text');
 const shiftDurationTimer = document.getElementById('shift-duration-timer');
 
 const counterDisplay = document.getElementById('counter-display');
-const btnPlusTask = document.getElementById('btn-plus-task');
-const btnMinusTask = document.getElementById('btn-minus-task');
+const btnPlusTask = document.getElementById('btn-increment') || document.getElementById('btn-plus-task');
+const btnMinusTask = document.getElementById('btn-undo-task') || document.getElementById('btn-minus-task');
 const counterAuditLog = document.getElementById('counter-audit-log');
 
 // --- TIME STEPPER HELPERS ---
@@ -708,12 +708,12 @@ function initEventListeners() {
     }
 
     // Shift Start/End buttons
-    btnStartShift.addEventListener('click', startShift);
-    btnEndShift.addEventListener('click', endShift);
+    if (btnStartShift) btnStartShift.addEventListener('click', startShift);
+    if (btnEndShift) btnEndShift.addEventListener('click', endShift);
 
     // Task Counter buttons
-    btnPlusTask.addEventListener('click', incrementTask);
-    btnMinusTask.addEventListener('click', decrementTask);
+    if (btnPlusTask) btnPlusTask.addEventListener('click', incrementTask);
+    if (btnMinusTask) btnMinusTask.addEventListener('click', decrementTask);
 
     // Keyboard Shortcuts
     document.addEventListener('keydown', handleKeyboardShortcuts);

@@ -1703,6 +1703,31 @@ function upsertPaymentEvent(evt) {
     localStorage.setItem('multimango_payments', JSON.stringify(paymentEvents));
 }
 
+function getCleanDeduplicatedPayments() {
+    // Stage priority ranking
+    const rank = { cleared: 3, tipalti_submitted: 2, wo_created: 1 };
+    const groupMap = new Map();
+
+    paymentEvents.forEach(evt => {
+        // Group by WO key if present, or by amount rounded to 2 decimals
+        const key = evt.woKey ? evt.woKey : `amt_${(evt.amount || 0).toFixed(2)}`;
+        if (!groupMap.has(key)) {
+            groupMap.set(key, evt);
+        } else {
+            const existing = groupMap.get(key);
+            const existingRank = rank[existing.stage] || 0;
+            const currentRank = rank[evt.stage] || 0;
+            
+            // Prefer higher stage rank, or newer date if same rank
+            if (currentRank > existingRank || (currentRank === existingRank && evt.date > existing.date)) {
+                groupMap.set(key, evt);
+            }
+        }
+    });
+
+    return Array.from(groupMap.values());
+}
+
 function renderPaymentCalendar() {
     const grid = document.getElementById('calendar-grid');
     const title = document.getElementById('cal-month-year-title');
@@ -1725,6 +1750,8 @@ function renderPaymentCalendar() {
         grid.appendChild(emptyCell);
     }
 
+    const cleanPayments = getCleanDeduplicatedPayments();
+
     for (let day = 1; day <= daysInMonth; day++) {
         const dayStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
         const cell = document.createElement('div');
@@ -1735,11 +1762,12 @@ function renderPaymentCalendar() {
         numEl.textContent = day;
         cell.appendChild(numEl);
 
-        const events = paymentEvents.filter(p => p.date === dayStr);
+        const events = cleanPayments.filter(p => p.date === dayStr);
         events.forEach(evt => {
             const badge = document.createElement('div');
             badge.className = `cal-event-badge stage-${evt.stage === 'wo_created' ? 'wo' : evt.stage === 'cleared' ? 'cleared' : 'submitted'}`;
-            badge.textContent = `$${evt.amount.toFixed(2)} ${evt.stage === 'cleared' ? '✓' : ''}`;
+            const labelText = evt.woKey ? evt.woKey : (evt.stage === 'cleared' ? 'Cleared' : evt.stage === 'tipalti_submitted' ? 'Tipalti Proc' : 'WO Created');
+            badge.textContent = `${labelText} ($${evt.amount.toFixed(2)})`;
             badge.addEventListener('click', () => openPaymentEventModal(evt));
             cell.appendChild(badge);
         });
@@ -1757,9 +1785,10 @@ function updatePaymentSummaryWidgets() {
     const clearedUsd = document.getElementById('pay-sum-cleared-usd');
     const clearedIdr = document.getElementById('pay-sum-cleared-idr');
 
-    const woEvents = paymentEvents.filter(p => p.stage === 'wo_created');
-    const procEvents = paymentEvents.filter(p => p.stage === 'tipalti_submitted');
-    const clearedEvents = paymentEvents.filter(p => p.stage === 'cleared');
+    const cleanPayments = getCleanDeduplicatedPayments();
+    const woEvents = cleanPayments.filter(p => p.stage === 'wo_created');
+    const procEvents = cleanPayments.filter(p => p.stage === 'tipalti_submitted');
+    const clearedEvents = cleanPayments.filter(p => p.stage === 'cleared');
 
     const totalWo = woEvents.reduce((s, e) => s + e.amount, 0);
     const totalProc = procEvents.reduce((s, e) => s + e.amount, 0);

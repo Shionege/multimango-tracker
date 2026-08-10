@@ -726,9 +726,14 @@ function initEventListeners() {
         btnSyncFolder.addEventListener('click', selectSyncFolder);
     }
 
-    // Shift Start/End buttons
+    // Shift Start/End buttons & Manual Add
     if (btnStartShift) btnStartShift.addEventListener('click', startShift);
     if (btnEndShift) btnEndShift.addEventListener('click', endShift);
+
+    const btnAddManualLog = document.getElementById('btn-add-manual-log');
+    if (btnAddManualLog) {
+        btnAddManualLog.addEventListener('click', addManualShiftLog);
+    }
 
     // Task Counter buttons
     if (btnPlusTask) btnPlusTask.addEventListener('click', incrementTask);
@@ -1063,6 +1068,42 @@ function updateUIForInactiveShift() {
 
     // Clear intervals
     if (liveTimerInterval) clearInterval(liveTimerInterval);
+}
+
+function addManualShiftLog() {
+    const date = shiftDateInput.value;
+    const startTime = getStepperTime('shift-start');
+    const endTime = getStepperTime('shift-end');
+    const tasks = parseInt(counterDisplay.textContent) || 0;
+
+    if (!date || !startTime || !endTime) {
+        showToast('Please select shift date, start time, and end time!', 'danger');
+        return;
+    }
+
+    const duration = getDurationHours(startTime, endTime);
+    if (duration <= 0) {
+        showToast('End Time must be later than Start Time!', 'danger');
+        return;
+    }
+
+    const rate = duration > 0 ? Number((tasks / duration).toFixed(2)) : 0;
+    const newLog = {
+        id: Date.now().toString(),
+        shiftId: 'manual_' + Date.now(),
+        date: date,
+        startTime: startTime,
+        endTime: endTime,
+        duration: duration,
+        tasks: tasks,
+        rate: rate
+    };
+
+    logs.push(newLog);
+    logs.sort((a, b) => b.id.localeCompare(a.id));
+    saveData();
+    renderLogs();
+    showToast(`Saved completed shift log for ${date} (${duration.toFixed(2)}h, ${tasks} tasks)!`, 'success');
 }
 
 function endShift() {

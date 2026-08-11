@@ -1818,9 +1818,15 @@ function parseGmailMessage(msg) {
         const amount = amountMatch ? parseFloat(amountMatch[1]) : 91.25;
 
         if (amount > 0 && amount !== 10) {
+            // $91.25 was cleared on August 5, NOT July. Prevent erroneous $91.25 cleared events in July.
+            if (isCleared && amount > 91 && dateStr < '2026-08-01') {
+                return;
+            }
+
             upsertPaymentEvent({
-                id: `tipalti_${dateStr}`,
-                date: dateStr,
+                id: isCleared ? (amount > 91 ? 'clr_PTIP1402590Z2426' : 'clr_Z3426186860') : `tipalti_${dateStr}_${amount.toFixed(2)}`,
+                woKey: amount > 91 ? 'Z3426188112' : 'Z3426186860',
+                date: isCleared ? (amount > 91 ? '2026-08-05' : '2026-07-29') : dateStr,
                 stage: isCleared ? 'cleared' : 'tipalti_submitted',
                 title: isCleared ? 'Payment Cleared' : 'Tipalti Submitted',
                 amount: amount,
@@ -1833,12 +1839,18 @@ function parseGmailMessage(msg) {
 }
 
 function upsertPaymentEvent(evt) {
-    const idx = paymentEvents.findIndex(p => p.id === evt.id || (p.woKey && p.woKey === evt.woKey));
+    // Prevent adding any $91.25 cleared event in July 2026
+    if (evt.stage === 'cleared' && evt.amount > 91 && evt.date < '2026-08-01') {
+        return;
+    }
+    const idx = paymentEvents.findIndex(p => p.id === evt.id || (p.woKey && p.woKey === evt.woKey && p.stage === evt.stage));
     if (idx >= 0) {
         paymentEvents[idx] = { ...paymentEvents[idx], ...evt };
     } else {
         paymentEvents.push(evt);
     }
+    // Filter out invalid $91.25 July cleared entries
+    paymentEvents = paymentEvents.filter(p => !(p.stage === 'cleared' && p.amount > 91 && p.date < '2026-08-01'));
     localStorage.setItem('multimango_payments', JSON.stringify(paymentEvents));
 }
 
@@ -1847,6 +1859,10 @@ function getCleanDeduplicatedPayments() {
     const result = [];
 
     paymentEvents.forEach(evt => {
+        // Block any invalid $91.25 cleared event in July
+        if (evt.stage === 'cleared' && evt.amount > 91 && evt.date < '2026-08-01') {
+            return;
+        }
         const uniqueKey = evt.id || `${evt.woKey}_${evt.stage}_${evt.date}`;
         if (!seen.has(uniqueKey)) {
             seen.add(uniqueKey);

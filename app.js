@@ -1618,19 +1618,6 @@ const DEFAULT_PAYMENT_EVENTS = [
         amount: 90.85,
         statusText: '🟢 Payment Cleared ($90.85)',
         details: 'Document No: Z3426186860 | Amount: $90.85'
-    },
-
-    // Work Order 3 ($91.25 - Cleared Jul 29)
-    {
-        id: 'clr_Jul29_9125',
-        woKey: 'Z3426188112_Jul29',
-        date: '2026-07-29',
-        stage: 'cleared',
-        title: 'Payment Cleared ($91.25)',
-        amount: 91.25,
-        amountIdr: 'Rp 1.583.237,00',
-        statusText: '🟢 Payment Cleared ($91.25 / Rp 1.583.237,00)',
-        details: 'USD $91.25 -> IDR Rp 1.583.237,00'
     }
 ];
 
@@ -1645,14 +1632,14 @@ function initPaymentCalendar() {
         try {
             const parsed = JSON.parse(savedPayments);
             if (Array.isArray(parsed) && parsed.length > 0) {
-                // Filter out any stale $10 test entries
-                const cleanParsed = parsed.filter(p => p.amount && p.amount !== 10 && p.amount > 20);
+                // Filter out any stale $10 test entries and duplicate Jul 29 $91.25 entry
+                const cleanParsed = parsed.filter(p => p.id !== 'clr_Jul29_9125' && p.amount && p.amount !== 10 && p.amount > 20);
                 paymentEvents = deduplicatePaymentEvents([...DEFAULT_PAYMENT_EVENTS, ...cleanParsed]);
             }
         } catch(e) {}
     }
-    // Filter paymentEvents to remove any $10 test item
-    paymentEvents = paymentEvents.filter(p => p.amount && p.amount !== 10 && p.amount > 20);
+    // Filter paymentEvents to ensure no clr_Jul29_9125 duplicate exists
+    paymentEvents = paymentEvents.filter(p => p.id !== 'clr_Jul29_9125' && p.amount && p.amount !== 10 && p.amount > 20);
     localStorage.setItem('multimango_payments', JSON.stringify(paymentEvents));
 
     const tabShift = document.getElementById('tab-shift-tracker');

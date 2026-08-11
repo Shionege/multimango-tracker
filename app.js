@@ -1924,23 +1924,71 @@ function updatePaymentSummaryWidgets() {
     const woVal = document.getElementById('pay-sum-wo-created');
     const woCnt = document.getElementById('pay-sum-wo-count');
     const procVal = document.getElementById('pay-sum-tipalti-proc');
+    const procCnt = document.getElementById('pay-sum-proc-count');
     const clearedUsd = document.getElementById('pay-sum-cleared-usd');
     const clearedIdr = document.getElementById('pay-sum-cleared-idr');
 
     const cleanPayments = getCleanDeduplicatedPayments();
-    const woEvents = cleanPayments.filter(p => p.stage === 'wo_created');
-    const procEvents = cleanPayments.filter(p => p.stage === 'tipalti_submitted');
-    const clearedEvents = cleanPayments.filter(p => p.stage === 'cleared');
 
-    const totalWo = woEvents.reduce((s, e) => s + e.amount, 0);
-    const totalProc = procEvents.reduce((s, e) => s + e.amount, 0);
-    const totalCleared = clearedEvents.reduce((s, e) => s + e.amount, 0);
+    // 1. Determine current max stage reached per Work Order
+    const woStatusMap = new Map();
+    cleanPayments.forEach(p => {
+        const key = p.woKey || `amt_${(p.amount || 0).toFixed(2)}`;
+        if (!woStatusMap.has(key)) {
+            woStatusMap.set(key, { amount: p.amount, maxStage: p.stage });
+        } else {
+            const entry = woStatusMap.get(key);
+            if (p.stage === 'cleared') {
+                entry.maxStage = 'cleared';
+            } else if (p.stage === 'tipalti_submitted' && entry.maxStage !== 'cleared') {
+                entry.maxStage = 'tipalti_submitted';
+            }
+        }
+    });
 
-    if (woVal) woVal.textContent = `$${totalWo.toFixed(2)}`;
-    if (woCnt) woCnt.textContent = `${woEvents.length} Work Orders`;
-    if (procVal) procVal.textContent = `$${totalProc.toFixed(2)}`;
-    if (clearedUsd) clearedUsd.textContent = `$${totalCleared.toFixed(2)}`;
-    if (clearedIdr) clearedIdr.textContent = clearedEvents.length > 0 ? (clearedEvents[0].amountIdr || 'Rp 1.583.237') : 'Rp 0';
+    // 2. Aggregate Pending WO and Processing in Tipalti
+    let pendingWoTotal = 0;
+    let pendingWoCount = 0;
+    let procTipaltiTotal = 0;
+    let procTipaltiCount = 0;
+
+    woStatusMap.forEach(entry => {
+        if (entry.maxStage === 'wo_created') {
+            pendingWoTotal += entry.amount;
+            pendingWoCount++;
+        } else if (entry.maxStage === 'tipalti_submitted') {
+            procTipaltiTotal += entry.amount;
+            procTipaltiCount++;
+        }
+    });
+
+    // 3. Filter Cleared events strictly for currently viewed calendar month & year
+    const targetYear = calendarCurrentDate.getFullYear();
+    const targetMonth = calendarCurrentDate.getMonth();
+
+    const clearedThisMonth = cleanPayments.filter(p => {
+        if (p.stage !== 'cleared') return false;
+        const d = new Date(p.date);
+        return d.getFullYear() === targetYear && d.getMonth() === targetMonth;
+    });
+
+    const totalClearedUsd = clearedThisMonth.reduce((s, e) => s + e.amount, 0);
+
+    let totalClearedIdrStr = 'Rp 0';
+    if (clearedThisMonth.length > 0) {
+        if (clearedThisMonth.length === 1 && clearedThisMonth[0].amountIdr) {
+            totalClearedIdrStr = clearedThisMonth[0].amountIdr;
+        } else {
+            totalClearedIdrStr = formatPaymentIDR(totalClearedUsd);
+        }
+    }
+
+    if (woVal) woVal.textContent = `$${pendingWoTotal.toFixed(2)}`;
+    if (woCnt) woCnt.textContent = `${pendingWoCount} Work Orders`;
+    if (procVal) procVal.textContent = `$${procTipaltiTotal.toFixed(2)}`;
+    if (procCnt) procCnt.textContent = `${procTipaltiCount} Payments`;
+    if (clearedUsd) clearedUsd.textContent = `$${totalClearedUsd.toFixed(2)}`;
+    if (clearedIdr) clearedIdr.textContent = totalClearedIdrStr;
 }
 
 function openPaymentEventModal(evt) {
